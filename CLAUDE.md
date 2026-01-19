@@ -121,6 +121,79 @@ Provide a summary at the end with issue counts by persona and priority items.
 
 ---
 
+## Persona Interaction Patterns
+
+Personas can interact through these defined patterns:
+
+### 1. Issue Escalation
+
+When one persona identifies an issue outside their expertise, escalate using:
+
+```
+ESCALATE TO [Persona]: [Issue description]
+```
+
+**Escalation rules:**
+- Student → Rigor Checker: "I can't follow this derivation" (may indicate missing steps)
+- Student → Implementation Bridge: "How would I code this?" (may need discrete-time version)
+- Rigor Checker → Implementation Bridge: "This inverse may be singular" (numerical issue)
+- Implementation Bridge → Rigor Checker: "Code doesn't match equation" (verify which is correct)
+- Consistency Guardian → Any: "Symbol conflict between sections" (determine canonical usage)
+
+### 2. Sequential Pipeline (Default)
+
+For "full review", personas run in order, each building on previous findings:
+
+```
+Student Review → identifies confusion points
+    ↓
+Rigor Checker → verifies math at confusion points + full check
+    ↓
+Implementation Bridge → checks implementability of verified math
+    ↓
+Consistency Guardian → ensures consistent presentation
+    ↓
+Exercise Designer → creates problems targeting identified concepts
+```
+
+### 3. Focused Cross-Review
+
+When asked to "cross-review" or "verify between personas":
+
+```
+"Cross-review Section X between Student and Rigor Checker"
+```
+
+Both personas review the same content, then compare findings:
+- **Agreements**: Confirmed issues (high priority)
+- **Student-only issues**: May indicate pedagogical gaps
+- **Rigor-only issues**: May be acceptable if doesn't affect understanding
+
+### 4. Conflict Resolution
+
+When personas disagree (e.g., Rigor Checker wants more detail, Student says it's already complex):
+
+**Resolution hierarchy:**
+1. **Safety/Correctness** (Rigor Checker) takes precedence over brevity
+2. **Implementability** (Implementation Bridge) takes precedence over elegance
+3. **Clarity** (Student) takes precedence over completeness when both are acceptable
+
+**Resolution format:**
+```
+CONFLICT: [Persona A] says X, [Persona B] says Y
+RESOLUTION: [Decision] because [rationale based on hierarchy]
+```
+
+### 5. Targeted Review Chains
+
+Request specific interaction patterns:
+
+- **"Review for implementation readiness"**: Implementation Bridge → Rigor Checker (verify math) → Student (check if code explanation is clear)
+- **"Review for exam preparation"**: Exercise Designer → Student (check problem clarity) → Rigor Checker (verify solutions)
+- **"Review for consistency"**: Consistency Guardian → all other personas (verify their domain's conventions)
+
+---
+
 ## File Structure
 
 - `main.tex` - Main document
