@@ -145,6 +145,19 @@
   title={Example~\theexample\ifx&#1&\else: #1\fi},
 }
 
+% Exercise environment with automatic numbering
+\newcounter{exercise}[chapter]
+\renewcommand{\theexercise}{\thechapter.\arabic{exercise}}
+\newtcolorbox{exercise}[1][]{
+  colback=orange!5!white,
+  colframe=orange!60!black,
+  fonttitle=\bfseries,
+  breakable,
+  enhanced,
+  before upper={\refstepcounter{exercise}},
+  title={Exercise~\theexercise\ifx&#1&\else: #1\fi},
+}
+
 % ===== Code Listings =====
 \usepackage{listings}
 \lstset{

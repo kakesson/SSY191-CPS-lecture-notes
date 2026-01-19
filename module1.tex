@@ -498,6 +498,31 @@ freedom), whereas a 3D rotation specifies an orientation in space and requires t
 degrees of freedom. This also affects rotation order: in 2D, all rotations are about
 the same axis and therefore commute, while in 3D rotations about different axes
 generally do not commute, making the order of rotations significant.
+
+\begin{notebox}[title=Rotation Matrix Notation Convention]
+\index{rotation matrix!notation}
+Throughout this course, we use superscript-subscript notation for rotation matrices:
+\[
+R^A_B \quad \text{means ``rotation from frame } B \text{ to frame } A\text{''}
+\]
+Equivalently, $R^A_B$ transforms a vector expressed in frame $\{B\}$ coordinates to frame $\{A\}$ coordinates:
+\[
+\mathbf{v}^A = R^A_B \, \mathbf{v}^B
+\]
+The superscript indicates the \textbf{destination frame} and the subscript indicates the \textbf{source frame}. This convention ensures that subscripts ``cancel'' in compositions: $R^A_B R^B_C = R^A_C$.
+
+\textbf{Common matrices in this course}:
+\begin{itemize}
+    \item $R^W_B$: Rotation from body to world (expresses body vectors in world coordinates)
+    \item $R^B_W = (R^W_B)^T$: Rotation from world to body (expresses world vectors in body coordinates)
+\end{itemize}
+\end{notebox}
+
+\begin{notebox}[title=Terminology: Attitude and Orientation]
+\index{attitude}\index{orientation}
+We use \textbf{attitude} and \textbf{orientation} interchangeably to mean the rotational state of the body frame relative to the world frame. Both terms are standard in the aerospace and robotics literature.
+\end{notebox}
+
 \subsection{3D Elementary Rotations}
 
 In 3D, we can rotate about any of the three coordinate axes. The rotation matrices are:
@@ -2089,10 +2114,12 @@ In the body frame:
 where:
 \begin{itemize}
     \item $\mathbf{a}_{body}$: True acceleration of the body in the world frame
-    \item $\mathbf{g} = [0, 0, g]^T$: Gravity vector in world frame (NED: points down)
-    \item $R^B_W$: Rotation from world to body frame
+    \item $\mathbf{g} = [0, 0, g]^T$: Gravity vector in world frame (NED: points down, so $g \approx 9.81$ m/s²)
+    \item $R^B_W = (R^W_B)^T$: Rotation from world to body frame (transforms world-frame vectors to body-frame coordinates)
     \item $\mathbf{b}_a$, $\mathbf{n}_a$: Bias and noise (similar to gyroscope)
 \end{itemize}
+
+\textbf{Sign interpretation}: The term $(\mathbf{a}_{body} - \mathbf{g})$ is the \emph{specific force} in world coordinates. When stationary ($\mathbf{a}_{body} = 0$), the accelerometer measures $-\mathbf{g}$ in world frame, which after rotation to body frame gives $R^B_W(-\mathbf{g})$. In NED with the quadrotor level, this yields $[0, 0, -g]^T$ in body frame---the accelerometer reads ``upward'' because it resists the downward pull of gravity.
 
 %----------------------------------------------------------------------
 % FIGURE: Accelerometer Specific Force (Spring-Mass Analogy)
@@ -2231,6 +2258,16 @@ Solving:
 \phi &= \text{atan2}(-f_y, -f_z) \label{eq:roll_from_accel} \\
 \theta &= \text{atan2}\left(f_x, \sqrt{f_y^2 + f_z^2}\right) \label{eq:pitch_from_accel}
 \end{align}
+
+\begin{notebox}[title=Why \texttt{atan2} Instead of \texttt{atan}?]
+\index{atan2}
+The two-argument function $\text{atan2}(y, x)$ returns the angle in the correct quadrant for all $(x, y)$, whereas $\text{atan}(y/x)$ only returns values in $(-90°, 90°)$ and fails when $x = 0$. For roll computation:
+\begin{itemize}
+    \item $\text{atan}(-f_y / -f_z)$: Fails when $f_z = 0$ (quadrotor on its side); wrong quadrant when $f_z > 0$ (upside down)
+    \item $\text{atan2}(-f_y, -f_z)$: Correctly handles all orientations including inverted flight
+\end{itemize}
+\textbf{Implementation rule}: Always use \texttt{atan2} for angle computations from vector components.
+\end{notebox}
 
 \begin{warningbox}[title=Accelerometer Cannot Measure Yaw]
 Gravity is a vertical vector. Rotating about the vertical axis (yaw) doesn't change the gravity direction in the body frame. Therefore, the accelerometer provides \textbf{no information about yaw}. This is not a sensor limitation---it's physics!
@@ -3185,10 +3222,59 @@ Consider the error sources:
 
 The complementary filter automatically separates these error sources by frequency!
 
+\begin{lstlisting}[language=C, caption=1D Complementary filter in C]
+// Configuration
+#define DT      0.01f   // Sample time [s] (100 Hz)
+#define TAU     1.0f    // Time constant [s]
+#define ALPHA   (TAU / (TAU + DT))  // ~0.99 for tau=1, dt=0.01
+
+// State
+float pitch_estimate = 0.0f;
+
+float complementary_filter_update(float gyro_rate,    // [rad/s]
+                                   float accel_pitch)  // [rad]
+{
+    // Predict from gyroscope
+    float prediction = pitch_estimate + DT * gyro_rate;
+
+    // Blend with accelerometer
+    pitch_estimate = ALPHA * prediction + (1.0f - ALPHA) * accel_pitch;
+
+    return pitch_estimate;
+}
+\end{lstlisting}
+
+\begin{notebox}[title=Unit Conversions]
+\index{units}
+IMU datasheets often specify gyroscope output in \textbf{degrees per second} (°/s or dps), but the equations in this chapter use \textbf{radians per second} (rad/s). Always convert:
+\[
+\omega_{\text{rad/s}} = \omega_{\text{deg/s}} \times \frac{\pi}{180} \approx \omega_{\text{deg/s}} \times 0.01745
+\]
+Similarly, accelerometer noise specifications may use units like $\mu g/\sqrt{\text{Hz}}$. Verify units match before implementing!
+\end{notebox}
+
 \section{Extension to 3D: The Mahony Filter}
 \index{Mahony filter}
 
 The 1D filter extends to 3D using quaternions. The Mahony filter~\cite{mahony2008nonlinear}\index{Mahony filter|textbf} is a widely-used, computationally efficient approach that provides theoretical guarantees on stability.
+
+\begin{keyidea}[title=From 1D to 3D: The Same Concept]
+The 3D Mahony filter uses the \textbf{exact same philosophy} as the 1D complementary filter:
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Concept} & \textbf{1D Complementary} & \textbf{3D Mahony} \\
+\midrule
+State representation & Angle $\theta$ & Quaternion $\mathbf{q}$ \\
+Gyro integration & $\hat\theta_{pred} = \hat\theta + h\omega$ & $\dot{\mathbf{q}} = \frac{1}{2}\mathbf{q} \otimes [0;\boldsymbol{\omega}]$ \\
+Accel reference & Directly gives $\theta_{accel}$ & Gives gravity direction $\hat{\mathbf{a}}$ \\
+Error computation & $e = \theta_{accel} - \hat\theta$ & $\mathbf{e} = \hat{\mathbf{a}} \times \hat{\mathbf{g}}_B$ \\
+Correction & Blend: $\alpha \cdot pred + (1{-}\alpha) \cdot accel$ & Gyro correction: $\boldsymbol{\omega} + K_p\mathbf{e}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+The key difference is that we cannot ``blend'' quaternions directly like we blend angles. Instead, we correct the \emph{gyroscope signal} with the error, then integrate. The cross product naturally gives us an angular velocity correction vector.
+\end{keyidea}
 
 \subsection{Key Idea}
 
@@ -3403,6 +3489,88 @@ The complete Mahony filter implementation is provided in Listing~\ref{lst:mahony
     \item Integrate quaternion using corrected angular velocity
     \item Renormalize quaternion to maintain unit magnitude
 \end{enumerate}
+
+\subsubsection{Discrete-Time Implementation}
+
+The continuous quaternion rate equation $\dot{\mathbf{q}} = \frac{1}{2}\mathbf{q} \otimes [0; \boldsymbol{\omega}]$ must be discretized for implementation. Using first-order (Euler) integration with sample time $h$:
+
+\begin{equation}
+\boxed{\mathbf{q}_{k+1} = \mathbf{q}_k + \frac{h}{2} \, \mathbf{q}_k \otimes \begin{bmatrix} 0 \\ \boldsymbol{\omega}_{corr,k} \end{bmatrix}}
+\label{eq:quaternion-euler-discrete}
+\end{equation}
+
+where $\boldsymbol{\omega}_{corr,k} = \boldsymbol{\omega}_{gyro,k} + K_p \mathbf{e}_k + K_i \sum_{j=0}^{k} \mathbf{e}_j \cdot h$ is the corrected angular velocity.
+
+For better numerical accuracy, especially at lower sample rates, use the \textbf{exponential integrator}:
+\begin{equation}
+\mathbf{q}_{k+1} = \mathbf{q}_k \otimes \begin{bmatrix} \cos(\|\boldsymbol{\omega}\| h / 2) \\ \frac{\boldsymbol{\omega}}{\|\boldsymbol{\omega}\|} \sin(\|\boldsymbol{\omega}\| h / 2) \end{bmatrix}
+\label{eq:quaternion-exponential}
+\end{equation}
+
+This preserves the unit quaternion property exactly (no normalization drift), but requires computing $\sin$ and $\cos$. For typical IMU sample rates ($\geq 100$ Hz), Euler integration with periodic normalization is sufficient.
+
+\begin{warningbox}[title=Normalization Is Essential]
+\index{quaternion!normalization}
+After integration, always renormalize: $\mathbf{q} \leftarrow \mathbf{q} / \|\mathbf{q}\|$.
+
+\textbf{Frequency}: Normalize every iteration. The cost is minimal (4 multiplies, 1 square root, 4 divides), and accumulated drift can cause the quaternion to drift from unit norm, leading to scaling errors in the rotation.
+\end{warningbox}
+
+\begin{lstlisting}[language=C, caption=Discrete-time Mahony filter in C]
+// Sample time
+#define DT 0.01f  // 100 Hz
+
+// Mahony gains (tune these)
+#define KP 2.0f
+#define KI 0.005f
+
+// State variables
+float q[4] = {1, 0, 0, 0};  // quaternion [w, x, y, z]
+float integralFB[3] = {0};   // integral feedback
+
+void mahony_update(float gx, float gy, float gz,  // gyro [rad/s]
+                   float ax, float ay, float az)  // accel [m/s^2]
+{
+    float norm, ex, ey, ez;
+
+    // Normalize accelerometer (ignore if zero)
+    norm = sqrtf(ax*ax + ay*ay + az*az);
+    if (norm < 0.001f) return;
+    ax /= norm; ay /= norm; az /= norm;
+
+    // Predicted gravity direction (from quaternion)
+    float vx = 2*(q[1]*q[3] - q[0]*q[2]);
+    float vy = 2*(q[0]*q[1] + q[2]*q[3]);
+    float vz = q[0]*q[0] - q[1]*q[1] - q[2]*q[2] + q[3]*q[3];
+
+    // Cross product error
+    ex = ay*vz - az*vy;
+    ey = az*vx - ax*vz;
+    ez = ax*vy - ay*vx;
+
+    // Integral feedback
+    integralFB[0] += KI * ex * DT;
+    integralFB[1] += KI * ey * DT;
+    integralFB[2] += KI * ez * DT;
+
+    // Apply correction
+    gx += KP*ex + integralFB[0];
+    gy += KP*ey + integralFB[1];
+    gz += KP*ez + integralFB[2];
+
+    // Quaternion integration (Euler)
+    float dq0 = 0.5f * (-q[1]*gx - q[2]*gy - q[3]*gz) * DT;
+    float dq1 = 0.5f * ( q[0]*gx + q[2]*gz - q[3]*gy) * DT;
+    float dq2 = 0.5f * ( q[0]*gy - q[1]*gz + q[3]*gx) * DT;
+    float dq3 = 0.5f * ( q[0]*gz + q[1]*gy - q[2]*gx) * DT;
+
+    q[0] += dq0; q[1] += dq1; q[2] += dq2; q[3] += dq3;
+
+    // Normalize quaternion
+    norm = sqrtf(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3]);
+    q[0] /= norm; q[1] /= norm; q[2] /= norm; q[3] /= norm;
+}
+\end{lstlisting}
 
 \subsection{Tuning}
 
@@ -3935,6 +4103,20 @@ The EKF can \textbf{diverge} (estimates become increasingly wrong) if:
     \item Noise covariances $\mathbf{Q}$, $\mathbf{R}$ are poorly specified
 \end{itemize}
 \end{warningbox}
+
+\begin{notebox}[title=Numerical Stability in EKF Implementation]
+\index{EKF!numerical stability}
+Floating-point arithmetic can cause the covariance matrix $\mathbf{P}$ to lose symmetry or positive definiteness, leading to filter divergence. \textbf{Implementation safeguards}:
+\begin{enumerate}
+    \item \textbf{Force symmetry} after each update: $\mathbf{P} \leftarrow \frac{1}{2}(\mathbf{P} + \mathbf{P}^T)$
+    \item \textbf{Joseph form} for covariance update (numerically stable):
+    \[
+    \mathbf{P}_{k|k} = (\mathbf{I} - \mathbf{K}_k\mathbf{H}_k)\mathbf{P}_{k|k-1}(\mathbf{I} - \mathbf{K}_k\mathbf{H}_k)^T + \mathbf{K}_k\mathbf{R}\mathbf{K}_k^T
+    \]
+    instead of $\mathbf{P}_{k|k} = (\mathbf{I} - \mathbf{K}_k\mathbf{H}_k)\mathbf{P}_{k|k-1}$ (standard form)
+    \item \textbf{Quaternion normalization}: Always renormalize after the EKF update to maintain $\|\mathbf{q}\| = 1$
+\end{enumerate}
+\end{notebox}
 
 \section{Attitude EKF Implementation}
 \label{sec:attitude-ekf}
@@ -5203,6 +5385,21 @@ The linearized model~\eqref{eq:linearized-full} is accurate when:
     \item Thrust is close to hover ($|T - mg| < 0.3mg$)
 \end{itemize}
 
+\textbf{Quantitative justification for the $15°$ bound}: The small-angle approximations $\sin\theta \approx \theta$ and $\cos\theta \approx 1$ introduce errors:
+\begin{center}
+\begin{tabular}{ccc}
+\toprule
+\textbf{Angle} & \textbf{Error in $\sin\theta \approx \theta$} & \textbf{Error in $\cos\theta \approx 1$} \\
+\midrule
+$5°$ (0.087 rad) & 0.1\% & 0.4\% \\
+$15°$ (0.26 rad) & 1.2\% & 3.4\% \\
+$30°$ (0.52 rad) & 4.7\% & 13\% \\
+$45°$ (0.79 rad) & 10\% & 29\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+At $15°$, the approximation errors are a few percent---acceptable for control design. Beyond $30°$, the linearization becomes unreliable.
+
 For aggressive maneuvers violating these assumptions, use the full nonlinear model~\eqref{eq:full-nonlinear} or gain-scheduled linearizations at multiple operating points.
 
 %----------------------------------------------------------------------
@@ -6147,3 +6344,254 @@ This module has developed the complete framework for quadrotor orientation estim
 \end{enumerate}
 
 In subsequent modules, you will implement these concepts on real hardware and design controllers for attitude and position regulation.
+
+%======================================================================
+% MODULE 1 EXERCISES
+%======================================================================
+\section{Exercises}
+
+\subsection{Coordinate Frames and Rotation Matrices}
+
+\begin{exercise}[Basic Rotation]
+\label{ex:basic-rotation}
+A point has position $\mathbf{p}^B = [3, 4, 0]^T$ meters in the body frame. The body frame is rotated by $\psi = 30°$ yaw (about the world $z$-axis) relative to the world frame.
+\begin{enumerate}[(a)]
+    \item Write the rotation matrix $R^W_B$ for this yaw-only rotation.
+    \item Compute the position of the point in world frame coordinates $\mathbf{p}^W$.
+    \item Verify that $\|\mathbf{p}^W\| = \|\mathbf{p}^B\|$ (rotation preserves length).
+\end{enumerate}
+
+\textit{Answer:} (a) $R^W_B = R_z(30°)$; (b) $\mathbf{p}^W = [0.598, 4.96, 0]^T$ m; (c) Both equal $5$ m.
+\end{exercise}
+
+\begin{exercise}[Euler Angles to Rotation Matrix]
+\label{ex:euler-to-rotation}
+A quadrotor has Euler angles $(\phi, \theta, \psi) = (10°, 20°, 45°)$ in the ZYX convention.
+\begin{enumerate}[(a)]
+    \item Compute the individual rotation matrices $R_z(\psi)$, $R_y(\theta)$, and $R_x(\phi)$.
+    \item Compute the combined rotation matrix $R^W_B = R_z(\psi) R_y(\theta) R_x(\phi)$.
+    \item Extract the Euler angles back from this matrix using the formulas in Section~\ref{sec:euler-extraction} to verify your result.
+\end{enumerate}
+
+\textit{Hint:} Use $\cos(10°) \approx 0.985$, $\sin(10°) \approx 0.174$, $\cos(20°) \approx 0.940$, $\sin(20°) \approx 0.342$, $\cos(45°) \approx 0.707$, $\sin(45°) \approx 0.707$.
+\end{exercise}
+
+\begin{exercise}[Gimbal Lock]
+\label{ex:gimbal-lock}
+At what pitch angle(s) does gimbal lock occur for ZYX Euler angles?
+\begin{enumerate}[(a)]
+    \item Write the expression for the $(1,1)$ and $(2,1)$ elements of $R^W_B$ in terms of Euler angles.
+    \item At what value of $\theta$ do both become zero?
+    \item If the quadrotor is at $\theta = 89°$, $\phi = 0°$, and you want to achieve a small yaw change of $\Delta\psi = 1°$ in 0.1 seconds, what Euler angle rates $[\dot\phi, \dot\theta, \dot\psi]$ are required?
+    \item What body angular velocity $[p, q, r]$ achieves the same motion? Why does this remain bounded?
+\end{enumerate}
+
+\textit{Answer:} (b) $\theta = \pm 90°$; (c) Euler rates become very large due to $\tan(89°) \approx 57$; (d) Body rates remain small because the gyroscope measures physical rotation directly.
+\end{exercise}
+
+\subsection{Quaternions}
+
+\begin{exercise}[Quaternion Basics]
+\label{ex:quat-basics}
+A rotation of $60°$ about the axis $\hat{\mathbf{n}} = \frac{1}{\sqrt{3}}[1, 1, 1]^T$ (equally inclined to all axes).
+\begin{enumerate}[(a)]
+    \item Compute the quaternion $\mathbf{q} = [q_0, q_1, q_2, q_3]^T$ representing this rotation.
+    \item Verify that $\|\mathbf{q}\| = 1$.
+    \item What quaternion represents the same rotation in the opposite direction (i.e., $-60°$ about the same axis)?
+    \item What quaternion represents zero rotation (identity)?
+\end{enumerate}
+
+\textit{Answer:} (a) $\mathbf{q} = [\cos(30°), \frac{\sin(30°)}{\sqrt{3}}, \frac{\sin(30°)}{\sqrt{3}}, \frac{\sin(30°)}{\sqrt{3}}]^T \approx [0.866, 0.289, 0.289, 0.289]^T$; (d) $\mathbf{q}_{identity} = [1, 0, 0, 0]^T$.
+\end{exercise}
+
+\begin{exercise}[Quaternion Double Cover]
+\label{ex:quat-double-cover}
+Show that $\mathbf{q}$ and $-\mathbf{q}$ represent the same rotation by:
+\begin{enumerate}[(a)]
+    \item Computing the rotation matrix $R(\mathbf{q})$ from the quaternion $\mathbf{q} = [0.866, 0.5, 0, 0]^T$.
+    \item Computing $R(-\mathbf{q})$ and showing it equals $R(\mathbf{q})$.
+    \item Explain why this ``double cover'' property exists using the half-angle formula.
+\end{enumerate}
+\end{exercise}
+
+\subsection{Inertial Sensors}
+
+\begin{exercise}[Gyroscope Drift]
+\label{ex:gyro-drift}
+A MEMS gyroscope has a bias of $b = 0.05°/s$ (unknown to the controller).
+\begin{enumerate}[(a)]
+    \item If the quadrotor is stationary, what will the integrated angle estimate show after 1 minute? After 10 minutes? After 1 hour?
+    \item If the specification says ``bias instability: $0.05°/s$,'' what does this actually mean about how the bias varies over time?
+    \item How does white noise (ARW = $0.01°/\sqrt{s}$) contribute differently to the error than bias?
+\end{enumerate}
+
+\textit{Answer:} (a) After 1 min: $3°$, after 10 min: $30°$, after 1 hour: $180°$.
+\end{exercise}
+
+\begin{exercise}[Accelerometer Roll/Pitch]
+\label{ex:accel-rollpitch}
+An accelerometer reads $\mathbf{f} = [-0.5, 0.2, -9.7]$ m/s² when the quadrotor is stationary. Assume ideal calibration and no noise.
+\begin{enumerate}[(a)]
+    \item What is the magnitude $\|\mathbf{f}\|$? Is this close to $g$?
+    \item Normalize the reading to get $\hat{\mathbf{f}}$ in units of $g$.
+    \item Compute the roll angle $\phi$ and pitch angle $\theta$ using Equations~\eqref{eq:roll_from_accel}--\eqref{eq:pitch_from_accel}.
+    \item Why can't we determine yaw from this measurement?
+\end{enumerate}
+
+\textit{Answer:} (a) $\|\mathbf{f}\| \approx 9.72$ m/s²; (c) $\phi \approx 1.2°$, $\theta \approx 2.9°$.
+\end{exercise}
+
+\begin{exercise}[Accelerometer During Motion]
+\label{ex:accel-motion}
+A level quadrotor accelerates forward at $2$ m/s² while maintaining zero roll and pitch.
+\begin{enumerate}[(a)]
+    \item What specific force $\mathbf{f}$ does the accelerometer measure? (Express in body frame.)
+    \item If you naively computed pitch from $\theta = \text{atan2}(f_x, \sqrt{f_y^2 + f_z^2})$, what angle would you get?
+    \item The true pitch is $0°$. What is the error?
+    \item How does the complementary filter handle this situation?
+\end{enumerate}
+
+\textit{Answer:} (b) Apparent pitch $\approx 11.5°$; (c) Error = $11.5°$.
+\end{exercise}
+
+\subsection{Orientation Estimation}
+
+\begin{exercise}[Complementary Filter Tuning]
+\label{ex:comp-filter-tuning}
+A complementary filter runs at 100 Hz ($h = 0.01$ s) with time constant $\tau = 1$ s.
+\begin{enumerate}[(a)]
+    \item Compute the filter parameter $\alpha = \tau/(\tau + h)$.
+    \item What percentage of each update comes from the gyroscope? From the accelerometer?
+    \item If you double the time constant to $\tau = 2$ s, what happens to $\alpha$?
+    \item Explain in physical terms what a larger $\tau$ means for the filter's behavior.
+\end{enumerate}
+
+\textit{Answer:} (a) $\alpha \approx 0.99$; (b) 99\% gyro, 1\% accel; (c) $\alpha \approx 0.995$.
+\end{exercise}
+
+\begin{exercise}[Mahony Filter Error]
+\label{ex:mahony-error}
+In the Mahony filter, the error is computed as $\mathbf{e} = \hat{\mathbf{a}} \times \hat{\mathbf{g}}_B$.
+\begin{enumerate}[(a)]
+    \item If $\hat{\mathbf{a}} = [0, 0, -1]^T$ (normalized accelerometer, pointing ``up'') and $\hat{\mathbf{g}}_B = [0.1, 0, -0.995]^T$ (predicted gravity from quaternion), compute the error vector $\mathbf{e}$.
+    \item What is the physical meaning of the direction of $\mathbf{e}$?
+    \item What is the magnitude $\|\mathbf{e}\|$ approximately equal to for small angles?
+    \item If $\hat{\mathbf{a}} = \hat{\mathbf{g}}_B$ exactly, what is $\mathbf{e}$?
+\end{enumerate}
+
+\textit{Answer:} (a) $\mathbf{e} = [0, -0.1, 0]^T$; (d) $\mathbf{e} = [0, 0, 0]^T$ (no correction needed).
+\end{exercise}
+
+\begin{exercise}[Implementation: 1D Filter]
+\label{ex:implement-1d}
+Implement a 1D complementary filter in MATLAB or Python:
+\begin{enumerate}[(a)]
+    \item Generate synthetic gyro data for a sinusoidal pitch motion $\theta(t) = 20° \sin(0.5t)$ at 100 Hz for 30 seconds, adding bias of $0.1°/s$ and white noise with $\sigma = 0.5°/s$.
+    \item Generate synthetic accelerometer data as the true pitch plus white noise with $\sigma = 3°$.
+    \item Run the complementary filter with $\tau = 0.5$, $1$, and $2$ seconds.
+    \item Plot the true angle, raw gyro integral, raw accelerometer, and three filtered outputs.
+    \item Compute the RMS error for each filter setting. Which $\tau$ works best?
+\end{enumerate}
+\end{exercise}
+
+\subsection{Quadrotor Dynamics}
+
+\begin{exercise}[Hover Thrust]
+\label{ex:hover-thrust}
+A quadrotor has mass $m = 0.5$ kg.
+\begin{enumerate}[(a)]
+    \item What total thrust $T$ is required to hover?
+    \item If the quadrotor uses 4 identical motors, what is each motor's thrust at hover?
+    \item If the thrust coefficient is $k_f = 2.5 \times 10^{-6}$ N/(rad/s)², what motor speed (in rad/s and RPM) is required for hover?
+\end{enumerate}
+
+\textit{Answer:} (a) $T = mg = 4.9$ N; (b) $T_i = 1.225$ N per motor; (c) $\omega = \sqrt{T_i/k_f} \approx 700$ rad/s $\approx 6700$ RPM.
+\end{exercise}
+
+\begin{exercise}[Tilt-to-Accelerate]
+\label{ex:tilt-accelerate}
+Using the linearized model, a quadrotor pitches nose-down by $\theta = -5°$ while maintaining hover thrust.
+\begin{enumerate}[(a)]
+    \item Using $\ddot{x} \approx -g\theta$, compute the horizontal acceleration.
+    \item If this acceleration is maintained for 2 seconds starting from rest, what velocity does the quadrotor reach?
+    \item What position (forward of the starting point) does it reach?
+    \item Why is this relationship only approximate?
+\end{enumerate}
+
+\textit{Answer:} (a) $\ddot{x} \approx 0.86$ m/s²; (b) $v_x \approx 1.7$ m/s; (c) $x \approx 1.7$ m.
+\end{exercise}
+
+\begin{exercise}[Linearization Validity]
+\label{ex:linearization-validity}
+The linearized quadrotor model uses the small-angle approximations $\sin\theta \approx \theta$ and $\cos\theta \approx 1$.
+\begin{enumerate}[(a)]
+    \item Compute the error in $\sin\theta \approx \theta$ for $\theta = 5°$, $15°$, $30°$, and $45°$ (in radians).
+    \item Compute the error in $\cos\theta \approx 1$ for the same angles.
+    \item Based on your results, up to what angle is the linearization reasonably accurate (say, less than 5\% error)?
+    \item For a quadrotor in aggressive flight with typical roll/pitch angles of $40°$, should you use the linearized or nonlinear model?
+\end{enumerate}
+\end{exercise}
+
+\subsection{Kalman Filter}
+
+\begin{exercise}[Kalman Gain Interpretation]
+\label{ex:kalman-gain}
+A 1D Kalman filter for pitch estimation has reached steady state with $K_{ss} = 0.1$.
+\begin{enumerate}[(a)]
+    \item If the predicted pitch is $\hat\theta_{k|k-1} = 10°$ and the accelerometer gives $\theta_{accel} = 8°$, what is the updated estimate $\hat\theta_{k|k}$?
+    \item If the Kalman gain were $K = 0$, what would the update give?
+    \item If the Kalman gain were $K = 1$, what would the update give?
+    \item What do these extreme cases correspond to physically?
+\end{enumerate}
+
+\textit{Answer:} (a) $\hat\theta_{k|k} = 10° + 0.1(8° - 10°) = 9.8°$; (b) $\hat\theta_{k|k} = 10°$ (ignore measurement); (c) $\hat\theta_{k|k} = 8°$ (trust measurement completely).
+\end{exercise}
+
+\begin{exercise}[Noise Covariance Effects]
+\label{ex:noise-covariance}
+In a Kalman filter, the process noise covariance is $Q$ and measurement noise covariance is $R$.
+\begin{enumerate}[(a)]
+    \item If $Q$ is increased (more process noise), does the steady-state Kalman gain $K_{ss}$ increase or decrease? Explain.
+    \item If $R$ is increased (more measurement noise), does $K_{ss}$ increase or decrease? Explain.
+    \item A practitioner notices the filter is too sluggish (slow to respond to real changes). Should they increase or decrease $Q$?
+    \item The filter output is too noisy. Should they increase or decrease $R$?
+\end{enumerate}
+\end{exercise}
+
+\subsection{Challenge Problems}
+
+\begin{exercise}[Quaternion vs. Euler Integration]
+\label{ex:quat-vs-euler}
+\textbf{[Challenging]}
+A quadrotor performs a sequence of maneuvers that passes through $\theta = 85°$ pitch.
+\begin{enumerate}[(a)]
+    \item Simulate integrating Euler angle rates $[\dot\phi, \dot\theta, \dot\psi]$ directly using the gyroscope and the inverse kinematic matrix $W(\phi, \theta)$.
+    \item Simulate integrating the quaternion using $\dot{\mathbf{q}} = \frac{1}{2}\mathbf{q} \otimes [0; \boldsymbol{\omega}]$.
+    \item Compare the two approaches as $\theta$ approaches $90°$. What happens to each?
+    \item Explain why quaternions are preferred for attitude integration in flight controllers.
+\end{enumerate}
+\end{exercise}
+
+\begin{exercise}[Sensor Fusion Design]
+\label{ex:sensor-fusion-design}
+\textbf{[Challenging]}
+You are designing a sensor fusion algorithm for a new quadrotor with unusually noisy accelerometers but very accurate gyroscopes (expensive tactical-grade MEMS).
+\begin{enumerate}[(a)]
+    \item How should you modify the complementary filter time constant $\tau$ compared to a typical consumer IMU?
+    \item In an EKF framework, how should the relative magnitudes of $Q$ and $R$ change?
+    \item The accelerometer noise increases dramatically during aggressive flight. How could you adapt the filter gains in real-time?
+    \item Propose a method to detect when the accelerometer is unreliable and should be weighted less.
+\end{enumerate}
+\end{exercise}
+
+\begin{exercise}[System Identification]
+\label{ex:sysid}
+\textbf{[Challenging]}
+You have flight log data with motor commands and measured roll angle and rate.
+\begin{enumerate}[(a)]
+    \item Describe an experiment to identify the roll moment of inertia $J_x$.
+    \item What data would you need to record?
+    \item How would you process the data to estimate $J_x$?
+    \item How would you validate that your estimate is correct?
+\end{enumerate}
+\end{exercise}
