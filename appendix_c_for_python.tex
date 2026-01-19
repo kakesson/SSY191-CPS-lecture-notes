@@ -1,0 +1,1221 @@
+%======================================================================
+% APPENDIX: C Programming for Python Programmers
+%
+% Target audience: Students familiar with Python who need to write
+% embedded C code for microcontrollers and FreeRTOS applications
+%======================================================================
+
+\appendix
+\chapter{C Programming for Python Programmers}
+
+\section{Introduction: Why C for Embedded Systems}
+
+If you're coming from Python, you might wonder why embedded systems use C instead of a more modern, user-friendly language. The answer lies in the fundamental differences between desktop/server computing and embedded systems:
+
+\begin{itemize}
+    \item \textbf{Memory constraints}: The Crazyflie's STM32 has 192 KB of RAM. Python's runtime alone requires megabytes.
+    \item \textbf{Predictable timing}: C compiles to machine code with deterministic execution time. Python's garbage collector can pause execution unpredictably.
+    \item \textbf{Direct hardware access}: C can read/write specific memory addresses (hardware registers) directly.
+    \item \textbf{No runtime overhead}: C has no interpreter, no virtual machine, no garbage collector.
+\end{itemize}
+
+\begin{keyidea}[title=Compiled vs. Interpreted]
+Python is \textbf{interpreted}: your code is read and executed line-by-line by the Python interpreter at runtime. C is \textbf{compiled}: your code is translated to machine instructions \textit{before} execution. The compiled binary runs directly on the processor with no intermediate layer.
+\end{keyidea}
+
+The trade-off is clear: C requires more careful programming (you manage memory manually, declare types explicitly, and handle errors yourself), but it gives you complete control over exactly what the processor does and when.
+
+%======================================================================
+\section{Variables and Type Declarations}
+%======================================================================
+
+\subsection{Python's Dynamic Typing vs. C's Static Typing}
+
+In Python, variables don't have types---values do. You can assign any value to any variable:
+
+\begin{center}
+\begin{tabular}{p{0.45\textwidth}|p{0.45\textwidth}}
+\textbf{Python} & \textbf{C} \\
+\hline
+\begin{lstlisting}[language=Python, numbers=none]
+x = 42          # x holds an integer
+x = 3.14        # now x holds a float
+x = "hello"     # now x holds a string
+\end{lstlisting}
+&
+\begin{lstlisting}[language=C, numbers=none]
+int x = 42;       // x can ONLY hold integers
+x = 3.14;         // truncates to 3!
+x = "hello";      // compile error
+\end{lstlisting}
+\end{tabular}
+\end{center}
+
+In C, every variable must be \textbf{declared} with a specific type before use. The type determines:
+\begin{enumerate}
+    \item How many bytes of memory to allocate
+    \item How to interpret the bit pattern stored there
+    \item What operations are valid
+\end{enumerate}
+
+\subsection{Basic Variable Declaration}
+
+\begin{center}
+\begin{tabular}{p{0.45\textwidth}|p{0.45\textwidth}}
+\textbf{Python} & \textbf{C} \\
+\hline
+\begin{lstlisting}[language=Python, numbers=none]
+# Variables created on first assignment
+count = 0
+temperature = 25.5
+is_active = True
+\end{lstlisting}
+&
+\begin{lstlisting}[language=C, numbers=none]
+// Must declare type before use
+int count = 0;
+float temperature = 25.5f;
+bool is_active = true;  // needs stdbool.h
+\end{lstlisting}
+\end{tabular}
+\end{center}
+
+\begin{notebox}
+In C, the \texttt{f} suffix on \texttt{25.5f} indicates a \texttt{float} literal. Without it, \texttt{25.5} is a \texttt{double} (64-bit), which would be implicitly converted to \texttt{float} (32-bit).
+\end{notebox}
+
+\subsection{Why Types Matter for Embedded Systems}
+
+On a desktop computer, you rarely think about whether an integer takes 4 or 8 bytes. On an embedded system with 192 KB of RAM, every byte counts:
+
+\begin{lstlisting}[language=C, caption=Memory-conscious variable declarations]
+// Sensor data buffer: 1000 samples
+// Using int (4 bytes each): 4000 bytes
+int sensor_buffer_wasteful[1000];
+
+// Using int16_t (2 bytes each): 2000 bytes - half the memory!
+int16_t sensor_buffer_efficient[1000];
+
+// For flags and small counters, use the smallest type that fits
+uint8_t motor_id;        // 0-255 is enough for motor index (1 byte)
+uint16_t sample_count;   // 0-65535 samples (2 bytes)
+\end{lstlisting}
+
+%======================================================================
+\section{Data Types for Embedded Programming}
+%======================================================================
+
+\subsection{Standard C Types}
+
+C provides several built-in types, but their sizes can vary between platforms:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Type} & \textbf{Typical Size} & \textbf{Description} \\
+\midrule
+\texttt{char} & 1 byte & Character or small integer \\
+\texttt{short} & 2 bytes & Short integer \\
+\texttt{int} & 4 bytes & Standard integer \\
+\texttt{long} & 4 or 8 bytes & Long integer (platform-dependent!) \\
+\texttt{float} & 4 bytes & Single-precision floating point \\
+\texttt{double} & 8 bytes & Double-precision floating point \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{warningbox}
+The sizes of \texttt{int} and \texttt{long} are \textbf{platform-dependent}. Code that assumes \texttt{int} is 4 bytes may break on different processors. This is why embedded programmers use fixed-width types.
+\end{warningbox}
+
+\subsection{Fixed-Width Integer Types (stdint.h)}
+
+For embedded programming, always use the fixed-width types from \texttt{<stdint.h>}:
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+\textbf{Type} & \textbf{Size} & \textbf{Range} & \textbf{Use Case} \\
+\midrule
+\texttt{uint8\_t} & 1 byte & 0 to 255 & GPIO pins, small counters \\
+\texttt{int8\_t} & 1 byte & -128 to 127 & Small signed values \\
+\texttt{uint16\_t} & 2 bytes & 0 to 65,535 & ADC readings, PWM values \\
+\texttt{int16\_t} & 2 bytes & -32,768 to 32,767 & Accelerometer raw data \\
+\texttt{uint32\_t} & 4 bytes & 0 to 4,294,967,295 & Timestamps, addresses \\
+\texttt{int32\_t} & 4 bytes & $\pm$2.1 billion & General computation \\
+\texttt{uint64\_t} & 8 bytes & 0 to $\sim 1.8 \times 10^{19}$ & High-resolution timestamps \\
+\texttt{int64\_t} & 8 bytes & $\pm 9.2 \times 10^{18}$ & Large calculations \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}[language=C, caption=Using fixed-width types for sensor data]
+#include <stdint.h>
+
+// IMU sensor readings (raw 16-bit signed values from hardware)
+typedef struct {
+    int16_t accel_x, accel_y, accel_z;  // Accelerometer
+    int16_t gyro_x, gyro_y, gyro_z;     // Gyroscope
+} ImuRawData_t;  // Total: 12 bytes
+
+// Motor PWM commands (0-65535 duty cycle)
+typedef struct {
+    uint16_t motor1, motor2, motor3, motor4;
+} MotorCommands_t;  // Total: 8 bytes
+
+// System timestamp (milliseconds since boot)
+uint32_t system_time_ms;  // Overflows after 49 days
+\end{lstlisting}
+
+\subsection{The sizeof Operator}
+
+C provides the \texttt{sizeof} operator to determine type sizes at compile time:
+
+\begin{center}
+\begin{tabular}{p{0.45\textwidth}|p{0.45\textwidth}}
+\textbf{Python} & \textbf{C} \\
+\hline
+\begin{lstlisting}[language=Python, numbers=none]
+import sys
+x = 42
+print(sys.getsizeof(x))  # 28 bytes!
+# Python integers have overhead
+\end{lstlisting}
+&
+\begin{lstlisting}[language=C, numbers=none]
+#include <stdio.h>
+int32_t x = 42;
+printf("%zu\n", sizeof(x));  // 4 bytes
+printf("%zu\n", sizeof(int32_t)); // 4
+\end{lstlisting}
+\end{tabular}
+\end{center}
+
+A Python integer object includes type information, reference count, and other overhead. A C \texttt{int32\_t} is \textit{exactly} 4 bytes---just the value, nothing else.
+
+%======================================================================
+\section{Numeric Operations and Precision}
+%======================================================================
+
+\subsection{Integer Division: A Critical Difference}
+
+One of the most common sources of bugs when moving from Python to C is integer division:
+
+\begin{center}
+\begin{tabular}{p{0.45\textwidth}|p{0.45\textwidth}}
+\textbf{Python 3} & \textbf{C} \\
+\hline
+\begin{lstlisting}[language=Python, numbers=none]
+result = 7 / 2
+print(result)  # 3.5 (float)
+
+result = 7 // 2
+print(result)  # 3 (integer division)
+\end{lstlisting}
+&
+\begin{lstlisting}[language=C, numbers=none]
+int result = 7 / 2;
+printf("%d\n", result);  // 3 (truncated!)
+
+float result2 = 7 / 2;
+printf("%f\n", result2); // 3.0 (still truncated!)
+\end{lstlisting}
+\end{tabular}
+\end{center}
+
+\begin{warningbox}
+In C, when both operands are integers, division produces an integer result (truncated toward zero). This happens \textbf{before} any assignment, so assigning to a float doesn't help---the precision is already lost!
+\end{warningbox}
+
+\subsection{Mixing Integers and Floats Safely}
+
+To get floating-point division, at least one operand must be a float:
+
+\begin{lstlisting}[language=C, caption=Correct ways to get floating-point division]
+int a = 7, b = 2;
+
+// WRONG: integer division happens first
+float wrong = a / b;           // wrong = 3.0
+
+// CORRECT: cast one operand to float
+float right1 = (float)a / b;   // right1 = 3.5
+float right2 = a / (float)b;   // right2 = 3.5
+float right3 = (float)a / (float)b;  // right3 = 3.5
+
+// CORRECT: use floating-point literal
+float right4 = a / 2.0f;       // right4 = 3.5
+\end{lstlisting}
+
+\subsection{Type Casting}
+
+C allows explicit type conversion (casting):
+
+\begin{lstlisting}[language=C, caption=Explicit type casting]
+// Converting float to int (truncates toward zero)
+float temperature = 25.7f;
+int temp_int = (int)temperature;  // temp_int = 25
+
+// Converting int to float
+int count = 100;
+float percentage = (float)count / 1000;  // percentage = 0.1
+
+// DANGER: narrowing conversions can lose data
+int32_t big_value = 100000;
+int16_t small = (int16_t)big_value;  // small = -31072 (overflow!)
+
+uint32_t positive = 42;
+int32_t signed_val = (int32_t)positive;  // OK if value fits
+\end{lstlisting}
+
+\subsection{Integer Overflow and Underflow}
+
+Unlike Python, C integers have fixed sizes and can overflow:
+
+\begin{center}
+\begin{tabular}{p{0.45\textwidth}|p{0.45\textwidth}}
+\textbf{Python} & \textbf{C} \\
+\hline
+\begin{lstlisting}[language=Python, numbers=none]
+x = 255
+x = x + 1
+print(x)  # 256 (arbitrary precision)
+
+x = 2 ** 100
+print(x)  # Works! Very large number
+\end{lstlisting}
+&
+\begin{lstlisting}[language=C, numbers=none]
+uint8_t x = 255;
+x = x + 1;
+printf("%d\n", x);  // 0 (wrapped around!)
+
+int32_t y = 2147483647;  // Max value
+y = y + 1;
+printf("%d\n", y);  // -2147483648 (overflow!)
+\end{lstlisting}
+\end{tabular}
+\end{center}
+
+\begin{keyidea}[title=Overflow Behavior]
+Unsigned integer overflow is well-defined in C: values wrap around (modulo $2^n$). Signed integer overflow is \textbf{undefined behavior}---the compiler can do anything, including optimizing away checks you thought would catch it!
+\end{keyidea}
+
+\subsection{Safe Arithmetic for Control Systems}
+
+In flight controller code, overflow can be catastrophic:
+
+\begin{lstlisting}[language=C, caption=Safe arithmetic patterns]
+// BAD: Can overflow before comparison
+int16_t sensor_value = 30000;
+if (sensor_value + 10000 > 32767) {  // Overflow happens first!
+    // This branch may never execute
+}
+
+// GOOD: Check before arithmetic
+int16_t sensor_value = 30000;
+if (sensor_value > 32767 - 10000) {  // Safe check
+    // Handle overflow case
+}
+
+// GOOD: Use larger type for intermediate calculations
+int16_t a = 30000, b = 20000;
+int32_t product = (int32_t)a * b;  // Won't overflow
+int16_t result = (product > 32767) ? 32767 : (int16_t)product;  // Saturate
+\end{lstlisting}
+
+%======================================================================
+\section{Pointers and Memory Addresses}
+%======================================================================
+
+Pointers are C's most powerful and most confusing feature. Coming from Python, you've never had to think about where values are stored in memory. In C, you often need to work with memory addresses directly.
+
+\subsection{What Is a Pointer?}
+
+A \textbf{pointer} is a variable that holds a memory address. Instead of storing a value like \texttt{42}, it stores the \textit{location} where \texttt{42} is stored.
+
+\begin{lstlisting}[language=C, caption=Pointer basics]
+int x = 42;       // x is a regular variable holding 42
+int *p = &x;      // p is a pointer holding the ADDRESS of x
+
+printf("Value of x: %d\n", x);       // 42
+printf("Address of x: %p\n", &x);    // 0x7ffd1234 (some memory address)
+printf("Value of p: %p\n", p);       // 0x7ffd1234 (same address)
+printf("Value at p: %d\n", *p);      // 42 (dereferencing)
+\end{lstlisting}
+
+\textbf{Key operators}:
+\begin{itemize}
+    \item \texttt{\&x} --- ``address of x'' --- gives you a pointer to \texttt{x}
+    \item \texttt{*p} --- ``dereference p'' --- gives you the value that \texttt{p} points to
+\end{itemize}
+
+\subsection{Pointer Declaration Syntax}
+
+\begin{lstlisting}[language=C, caption=Declaring pointers]
+int *p;        // p is a pointer to an int
+float *fp;     // fp is a pointer to a float
+char *str;     // str is a pointer to a char (commonly used for strings)
+
+// The * is part of the declaration, not the name
+int *p1, *p2;  // Both are pointers
+int *p3, x;    // p3 is a pointer, x is a regular int (confusing!)
+
+// Clearer style: one declaration per line
+int *p4;
+int *p5;
+int y;
+\end{lstlisting}
+
+\subsection{Why Pointers Matter for Embedded Systems}
+
+\textbf{1. Hardware registers are at fixed memory addresses:}
+\begin{lstlisting}[language=C, caption=Accessing hardware registers via pointers]
+// STM32 GPIO register at fixed address
+#define GPIOA_ODR (*(volatile uint32_t*)0x40020014)
+
+// Set pin 5 high
+GPIOA_ODR |= (1 << 5);
+\end{lstlisting}
+
+\textbf{2. Functions can modify caller's variables:}
+\begin{lstlisting}[language=C, caption=Using pointers to modify variables]
+// Without pointers: can't modify caller's variable
+void increment_wrong(int x) {
+    x = x + 1;  // Modifies local copy, original unchanged
+}
+
+// With pointers: can modify caller's variable
+void increment_right(int *x) {
+    *x = *x + 1;  // Modifies value at address x points to
+}
+
+int main(void) {
+    int value = 10;
+    increment_wrong(value);
+    printf("%d\n", value);  // Still 10
+
+    increment_right(&value);
+    printf("%d\n", value);  // Now 11
+}
+\end{lstlisting}
+
+\textbf{3. Efficient passing of large structures:}
+\begin{lstlisting}[language=C, caption=Passing structures by pointer]
+typedef struct {
+    float position[3];
+    float velocity[3];
+    float orientation[4];
+    float angular_velocity[3];
+} QuadrotorState_t;  // 52 bytes
+
+// BAD: Copies 52 bytes every call
+void process_state_slow(QuadrotorState_t state) { ... }
+
+// GOOD: Passes only 4 bytes (the pointer)
+void process_state_fast(QuadrotorState_t *state) { ... }
+
+// BETTER: const prevents accidental modification
+void process_state_safe(const QuadrotorState_t *state) { ... }
+\end{lstlisting}
+
+\subsection{NULL Pointers}
+
+A pointer that doesn't point to valid memory should be set to \texttt{NULL}:
+
+\begin{lstlisting}[language=C, caption=NULL pointer safety]
+int *p = NULL;  // p points to nothing
+
+// Always check before dereferencing
+if (p != NULL) {
+    int value = *p;  // Safe
+} else {
+    // Handle error
+}
+
+// Dereferencing NULL is undefined behavior (usually crashes)
+int bad = *p;  // CRASH or unpredictable behavior
+\end{lstlisting}
+
+%======================================================================
+\section{Memory: Stack vs. Heap}
+%======================================================================
+
+In Python, you never think about where objects are stored---Python handles it automatically. In C, you must understand the two regions of memory where variables can live: the \textbf{stack} and the \textbf{heap}.
+
+\subsection{Stack Memory}
+
+The \textbf{stack} is used for:
+\begin{itemize}
+    \item Local variables inside functions
+    \item Function parameters
+    \item Return addresses
+\end{itemize}
+
+\begin{lstlisting}[language=C, caption=Stack allocation (automatic)]
+void process_sensor_data(void) {
+    // These variables are allocated on the stack
+    int16_t raw_reading;           // 2 bytes on stack
+    float calibrated_value;        // 4 bytes on stack
+    float buffer[100];             // 400 bytes on stack
+
+    // ... use the variables ...
+
+}  // Variables automatically deallocated when function returns
+\end{lstlisting}
+
+\textbf{Stack characteristics}:
+\begin{itemize}
+    \item \textbf{Fast}: Allocation is just moving a pointer
+    \item \textbf{Automatic}: Variables are deallocated when function returns
+    \item \textbf{Limited size}: Typically 1-8 KB on embedded systems
+    \item \textbf{LIFO}: Last allocated, first deallocated
+\end{itemize}
+
+\begin{warningbox}
+Stack overflow is a serious risk in embedded systems. If you declare large arrays on the stack, you can overflow into other memory regions, causing mysterious crashes. The FreeRTOS task stacks are typically only 1-4 KB!
+\end{warningbox}
+
+\subsection{Heap Memory}
+
+The \textbf{heap} is used for dynamically allocated memory that persists beyond a single function call.
+
+\begin{lstlisting}[language=C, caption=Heap allocation with malloc and calloc]
+#include <stdlib.h>
+
+void example(void) {
+    // malloc: allocate uninitialized memory
+    // Returns pointer to allocated block, or NULL on failure
+    int *data = (int*)malloc(100 * sizeof(int));  // 400 bytes
+
+    if (data == NULL) {
+        // Allocation failed - handle error!
+        return;
+    }
+
+    // WARNING: malloc memory is UNINITIALIZED (contains garbage)
+    data[0] = 42;  // Must initialize before reading
+
+    // calloc: allocate AND initialize to zero
+    float *buffer = (float*)calloc(100, sizeof(float));  // 400 bytes, all zeros
+
+    // ... use the memory ...
+
+    // MUST free when done, or memory is leaked
+    free(data);
+    free(buffer);
+
+    // Good practice: set pointer to NULL after freeing
+    data = NULL;
+    buffer = NULL;
+}
+\end{lstlisting}
+
+\begin{center}
+\begin{tabular}{p{0.45\textwidth}|p{0.45\textwidth}}
+\textbf{Python} & \textbf{C} \\
+\hline
+\begin{lstlisting}[language=Python, numbers=none]
+# Python manages memory automatically
+data = [0] * 100  # Allocate list
+
+# Use the list...
+
+# No need to free - garbage collector
+# handles it when no references remain
+\end{lstlisting}
+&
+\begin{lstlisting}[language=C, numbers=none]
+// C requires manual memory management
+int *data = calloc(100, sizeof(int));
+if (data == NULL) { /* handle error */ }
+
+// Use the array...
+
+// MUST free or memory leaks forever
+free(data);
+\end{lstlisting}
+\end{tabular}
+\end{center}
+
+\subsection{malloc vs. calloc}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Function} & \textbf{Syntax} & \textbf{Initialization} \\
+\midrule
+\texttt{malloc} & \texttt{malloc(size\_in\_bytes)} & Uninitialized (garbage) \\
+\texttt{calloc} & \texttt{calloc(count, element\_size)} & Zero-initialized \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}[language=C, caption=malloc vs calloc]
+// These allocate the same amount of memory:
+int *a = (int*)malloc(100 * sizeof(int));  // 400 bytes, garbage values
+int *b = (int*)calloc(100, sizeof(int));   // 400 bytes, all zeros
+
+// For sensor buffers, calloc is often safer:
+float *sensor_history = (float*)calloc(HISTORY_SIZE, sizeof(float));
+// All values start at 0.0, which is a sensible default
+\end{lstlisting}
+
+\subsection{Memory Leaks and Dangling Pointers}
+
+\textbf{Memory leak}: Allocated memory that is never freed:
+
+\begin{lstlisting}[language=C, caption=Memory leak example]
+void memory_leak(void) {
+    int *data = (int*)malloc(1000 * sizeof(int));
+    // ... use data ...
+
+    // Oops, forgot to free!
+    // This memory is now lost until system reboot
+}
+
+void call_many_times(void) {
+    for (int i = 0; i < 10000; i++) {
+        memory_leak();  // Leaks 4KB each call -> 40MB leaked!
+    }
+}
+\end{lstlisting}
+
+\textbf{Dangling pointer}: Pointer to memory that has been freed:
+
+\begin{lstlisting}[language=C, caption=Dangling pointer example]
+int *create_data(void) {
+    int *data = (int*)malloc(100 * sizeof(int));
+    data[0] = 42;
+    return data;  // OK: returning heap pointer
+}
+
+int *dangling_example(void) {
+    int local_array[100];
+    local_array[0] = 42;
+    return local_array;  // DANGER: returning pointer to stack!
+}  // local_array is deallocated here, pointer is now dangling
+
+void double_free_example(void) {
+    int *data = (int*)malloc(100 * sizeof(int));
+    free(data);
+    free(data);  // DANGER: double free - undefined behavior!
+}
+\end{lstlisting}
+
+\subsection{Why Embedded Systems Often Avoid Heap}
+
+Many embedded systems, including safety-critical flight controllers, avoid dynamic memory allocation:
+
+\begin{itemize}
+    \item \textbf{Fragmentation}: After many alloc/free cycles, heap becomes fragmented
+    \item \textbf{Non-deterministic timing}: malloc may take variable time
+    \item \textbf{Failure modes}: What if malloc returns NULL during flight?
+    \item \textbf{Certification}: Safety standards often prohibit dynamic allocation
+\end{itemize}
+
+\begin{keyidea}[title=Static Allocation in Embedded Systems]
+Embedded flight controllers typically allocate all memory statically at compile time. If the code compiles and links, you know it will fit in memory. FreeRTOS supports static allocation where you provide memory buffers for tasks, queues, and semaphores.
+\end{keyidea}
+
+%======================================================================
+\section{Functions in C}
+%======================================================================
+
+\subsection{Function Declaration and Definition}
+
+\begin{center}
+\begin{tabular}{p{0.45\textwidth}|p{0.45\textwidth}}
+\textbf{Python} & \textbf{C} \\
+\hline
+\begin{lstlisting}[language=Python, numbers=none]
+def add(a, b):
+    """Add two numbers."""
+    return a + b
+
+# Can call immediately
+result = add(3, 4)
+\end{lstlisting}
+&
+\begin{lstlisting}[language=C, numbers=none]
+// Declaration (prototype) - optional but recommended
+int add(int a, int b);
+
+// Definition (implementation)
+int add(int a, int b) {
+    return a + b;
+}
+
+// Call
+int result = add(3, 4);
+\end{lstlisting}
+\end{tabular}
+\end{center}
+
+In C, functions must be declared before use. The declaration (prototype) specifies:
+\begin{itemize}
+    \item Return type (\texttt{int}, \texttt{void}, \texttt{float}, etc.)
+    \item Function name
+    \item Parameter types
+\end{itemize}
+
+\subsection{Pass by Value (Default)}
+
+C passes arguments \textbf{by value}: the function receives a copy of the argument.
+
+\begin{lstlisting}[language=C, caption=Pass by value - function cannot modify original]
+void try_to_modify(int x) {
+    x = 100;  // Modifies local copy only
+    printf("Inside function: %d\n", x);  // 100
+}
+
+int main(void) {
+    int value = 42;
+    try_to_modify(value);
+    printf("After function: %d\n", value);  // Still 42!
+    return 0;
+}
+\end{lstlisting}
+
+\subsection{Pass by Pointer (Simulating Pass by Reference)}
+
+To modify the caller's variable, pass a pointer:
+
+\begin{center}
+\begin{tabular}{p{0.45\textwidth}|p{0.45\textwidth}}
+\textbf{Python} & \textbf{C} \\
+\hline
+\begin{lstlisting}[language=Python, numbers=none]
+# Python passes object references
+def modify_list(lst):
+    lst.append(4)  # Modifies original
+
+data = [1, 2, 3]
+modify_list(data)
+print(data)  # [1, 2, 3, 4]
+\end{lstlisting}
+&
+\begin{lstlisting}[language=C, numbers=none]
+// C needs explicit pointers
+void modify_value(int *ptr) {
+    *ptr = 100;  // Modifies original
+}
+
+int main(void) {
+    int data = 42;
+    modify_value(&data);  // Pass address
+    printf("%d\n", data); // 100
+}
+\end{lstlisting}
+\end{tabular}
+\end{center}
+
+\subsection{Returning Multiple Values}
+
+Python can return tuples; C cannot. Use pointers for output parameters:
+
+\begin{center}
+\begin{tabular}{p{0.45\textwidth}|p{0.45\textwidth}}
+\textbf{Python} & \textbf{C} \\
+\hline
+\begin{lstlisting}[language=Python, numbers=none]
+def compute_stats(data):
+    return min(data), max(data), sum(data)/len(data)
+
+lo, hi, avg = compute_stats([1,2,3,4,5])
+\end{lstlisting}
+&
+\begin{lstlisting}[language=C, numbers=none]
+void compute_stats(int *data, int len,
+                   int *min_out, int *max_out,
+                   float *avg_out) {
+    *min_out = data[0];
+    *max_out = data[0];
+    int sum = 0;
+    for (int i = 0; i < len; i++) {
+        if (data[i] < *min_out) *min_out = data[i];
+        if (data[i] > *max_out) *max_out = data[i];
+        sum += data[i];
+    }
+    *avg_out = (float)sum / len;
+}
+
+// Usage:
+int arr[] = {1, 2, 3, 4, 5};
+int lo, hi;
+float avg;
+compute_stats(arr, 5, &lo, &hi, &avg);
+\end{lstlisting}
+\end{tabular}
+\end{center}
+
+\subsection{Void Functions}
+
+Functions that don't return a value use \texttt{void}:
+
+\begin{lstlisting}[language=C, caption=Void functions]
+void print_status(int motor_id, float speed) {
+    printf("Motor %d: %.2f RPM\n", motor_id, speed);
+    // No return statement needed (or use: return;)
+}
+
+// Functions with no parameters should use void explicitly
+void initialize_system(void) {  // void means "no parameters"
+    // Setup code...
+}
+
+// Note: empty parentheses means "unspecified parameters" in C (legacy)
+void ambiguous();     // Avoid this
+void clear(void);     // Prefer this
+\end{lstlisting}
+
+%======================================================================
+\section{Arrays}
+%======================================================================
+
+\subsection{Stack-Allocated Arrays (Fixed Size)}
+
+\begin{center}
+\begin{tabular}{p{0.45\textwidth}|p{0.45\textwidth}}
+\textbf{Python} & \textbf{C} \\
+\hline
+\begin{lstlisting}[language=Python, numbers=none]
+# Lists are dynamic
+data = [0.0] * 10  # 10 floats
+data.append(1.0)   # Can grow
+print(len(data))   # 11
+\end{lstlisting}
+&
+\begin{lstlisting}[language=C, numbers=none]
+// Arrays are fixed size
+float data[10];  // 10 floats on stack
+// data[10] = 1.0;  // OUT OF BOUNDS!
+// No len() - you must track size yourself
+#define DATA_SIZE 10
+\end{lstlisting}
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}[language=C, caption=Stack arrays in embedded code]
+#define FILTER_TAPS 32
+
+void apply_filter(float *input, float *output, int length) {
+    // Coefficients stored on stack (fixed at compile time)
+    static const float coefficients[FILTER_TAPS] = {
+        0.01f, 0.02f, 0.03f, /* ... */ 0.01f
+    };
+
+    // Temporary buffer on stack
+    float temp[FILTER_TAPS];
+
+    // Process data...
+}
+\end{lstlisting}
+
+\begin{warningbox}
+C arrays have \textbf{no bounds checking}. Accessing \texttt{data[10]} when the array has only 10 elements (indices 0-9) is undefined behavior---it may read/write random memory, corrupt data, or crash. Always track array sizes carefully!
+\end{warningbox}
+
+\subsection{Heap-Allocated Arrays (Dynamic Size)}
+
+\begin{lstlisting}[language=C, caption=Heap-allocated arrays]
+// Size determined at runtime
+int num_sensors = get_sensor_count();
+
+// Allocate array on heap
+float *readings = (float*)calloc(num_sensors, sizeof(float));
+if (readings == NULL) {
+    // Handle allocation failure
+    return ERROR_NO_MEMORY;
+}
+
+// Use like a regular array
+for (int i = 0; i < num_sensors; i++) {
+    readings[i] = read_sensor(i);
+}
+
+// Must free when done
+free(readings);
+readings = NULL;
+\end{lstlisting}
+
+\subsection{Arrays and Pointers}
+
+In C, arrays and pointers are closely related. When you pass an array to a function, it ``decays'' to a pointer:
+
+\begin{lstlisting}[language=C, caption=Array decay to pointer]
+void process_data(float *data, int size) {
+    // data is a pointer, not an array
+    // sizeof(data) gives pointer size (4 or 8), NOT array size!
+    for (int i = 0; i < size; i++) {
+        data[i] *= 2.0f;
+    }
+}
+
+int main(void) {
+    float values[100];
+
+    // These two calls are equivalent:
+    process_data(values, 100);       // Array decays to pointer
+    process_data(&values[0], 100);   // Explicitly pass address of first element
+
+    // CRITICAL: Always pass the size separately!
+    // The function has no way to know the array size
+    return 0;
+}
+\end{lstlisting}
+
+\subsection{Multi-Dimensional Arrays}
+
+For sensor data matrices, IMU calibration, rotation matrices, etc.:
+
+\begin{lstlisting}[language=C, caption=Multi-dimensional arrays]
+// 3x3 rotation matrix (stack allocated)
+float rotation[3][3] = {
+    {1.0f, 0.0f, 0.0f},
+    {0.0f, 1.0f, 0.0f},
+    {0.0f, 0.0f, 1.0f}
+};
+
+// Access elements
+float r00 = rotation[0][0];  // Row 0, Column 0
+
+// Passing to functions - must specify all but first dimension
+void apply_rotation(float R[3][3], float v[3], float result[3]) {
+    for (int i = 0; i < 3; i++) {
+        result[i] = 0.0f;
+        for (int j = 0; j < 3; j++) {
+            result[i] += R[i][j] * v[j];
+        }
+    }
+}
+
+// Alternative: use 1D array with manual indexing
+float matrix[9];  // 3x3 stored as 1D
+#define MAT(r, c) matrix[(r) * 3 + (c)]
+MAT(1, 2) = 0.5f;  // Set row 1, column 2
+\end{lstlisting}
+
+%======================================================================
+\section{Function Pointers}
+%======================================================================
+
+A \textbf{function pointer} stores the address of a function, allowing functions to be passed as arguments, stored in data structures, and called indirectly. This is essential for understanding how FreeRTOS creates tasks.
+
+\subsection{Basic Syntax}
+
+\begin{lstlisting}[language=C, caption=Function pointer declaration and use]
+// A regular function
+int add(int a, int b) {
+    return a + b;
+}
+
+int subtract(int a, int b) {
+    return a - b;
+}
+
+int main(void) {
+    // Declare a function pointer
+    // int (*operation)(int, int) means:
+    // - operation is a pointer (*)
+    // - to a function that takes two ints
+    // - and returns an int
+    int (*operation)(int, int);
+
+    // Assign function address (& is optional for functions)
+    operation = add;        // or: operation = &add;
+
+    // Call through the pointer
+    int result = operation(5, 3);  // result = 8
+
+    // Change to different function
+    operation = subtract;
+    result = operation(5, 3);      // result = 2
+
+    return 0;
+}
+\end{lstlisting}
+
+\subsection{Function Pointers as Parameters}
+
+\begin{center}
+\begin{tabular}{p{0.45\textwidth}|p{0.45\textwidth}}
+\textbf{Python} & \textbf{C} \\
+\hline
+\begin{lstlisting}[language=Python, numbers=none]
+def apply_operation(func, a, b):
+    return func(a, b)
+
+def multiply(x, y):
+    return x * y
+
+result = apply_operation(multiply, 4, 5)
+# result = 20
+\end{lstlisting}
+&
+\begin{lstlisting}[language=C, numbers=none]
+int apply_operation(int (*func)(int, int),
+                    int a, int b) {
+    return func(a, b);
+}
+
+int multiply(int x, int y) {
+    return x * y;
+}
+
+int result = apply_operation(multiply, 4, 5);
+// result = 20
+\end{lstlisting}
+\end{tabular}
+\end{center}
+
+\subsection{Typedef for Cleaner Syntax}
+
+Function pointer syntax is notoriously confusing. Use \texttt{typedef} for clarity:
+
+\begin{lstlisting}[language=C, caption=Using typedef with function pointers]
+// Without typedef - hard to read
+int (*operation)(int, int);
+void register_callback(int (*callback)(int, int));
+
+// With typedef - much clearer
+typedef int (*BinaryOp)(int, int);
+
+BinaryOp operation;
+void register_callback(BinaryOp callback);
+\end{lstlisting}
+
+\subsection{FreeRTOS Task Creation}
+
+FreeRTOS uses function pointers to specify what code each task should run:
+
+\begin{lstlisting}[language=C, caption=FreeRTOS xTaskCreate uses function pointers]
+// FreeRTOS task function signature
+// Must return void and take void* parameter
+typedef void (*TaskFunction_t)(void *pvParameters);
+
+// Your task function must match this signature
+void SensorTask(void *pvParameters) {
+    // Task code - runs in infinite loop
+    for (;;) {
+        // Read sensors
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
+
+void ControlTask(void *pvParameters) {
+    for (;;) {
+        // Compute control
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+}
+
+int main(void) {
+    // xTaskCreate takes a function pointer as first argument
+    // This tells FreeRTOS which function to run for each task
+
+    xTaskCreate(
+        SensorTask,       // Function pointer - which code to run
+        "Sensor",         // Task name (for debugging)
+        256,              // Stack size (words)
+        NULL,             // Parameter passed to task (pvParameters)
+        2,                // Priority
+        NULL              // Task handle (optional output)
+    );
+
+    xTaskCreate(
+        ControlTask,      // Different function for this task
+        "Control",
+        256,
+        NULL,
+        3,                // Higher priority
+        NULL
+    );
+
+    vTaskStartScheduler();
+    return 0;
+}
+\end{lstlisting}
+
+\begin{keyidea}[title=Why Function Pointers in FreeRTOS]
+The RTOS scheduler needs to know \textit{where} each task's code is located in memory. By passing a function pointer to \texttt{xTaskCreate}, you tell the scheduler: ``When it's this task's turn to run, jump to this memory address and start executing.'' The scheduler saves and restores the CPU state and stack for each task, then uses the function pointer to resume execution.
+\end{keyidea}
+
+\subsection{Callback Pattern}
+
+Function pointers enable the callback pattern, common in embedded systems:
+
+\begin{lstlisting}[language=C, caption=Callback pattern for sensor data]
+// Define callback type
+typedef void (*SensorCallback)(float value, uint32_t timestamp);
+
+// Module stores the callback
+static SensorCallback user_callback = NULL;
+
+// User registers their callback
+void register_sensor_callback(SensorCallback cb) {
+    user_callback = cb;
+}
+
+// Internal: called when new data arrives
+void sensor_interrupt_handler(void) {
+    float value = read_sensor_hardware();
+    uint32_t time = get_timestamp();
+
+    // Invoke user's callback if registered
+    if (user_callback != NULL) {
+        user_callback(value, time);
+    }
+}
+
+// User code
+void my_handler(float value, uint32_t timestamp) {
+    printf("Sensor: %.2f at time %lu\n", value, timestamp);
+}
+
+int main(void) {
+    register_sensor_callback(my_handler);
+    // Now my_handler will be called whenever sensor data arrives
+}
+\end{lstlisting}
+
+%======================================================================
+\section{Common Pitfalls for Python Programmers}
+%======================================================================
+
+\subsection{No Automatic Bounds Checking}
+
+\begin{lstlisting}[language=C, caption=Buffer overflow - silent corruption]
+char buffer[10];
+buffer[15] = 'X';  // UNDEFINED BEHAVIOR - writes beyond array
+// No exception, no error message - just corrupts memory
+// May work in testing, crash in production
+
+// Python equivalent would raise IndexError
+\end{lstlisting}
+
+\textbf{Solution}: Always validate indices, use constants for array sizes, consider using static analysis tools.
+
+\subsection{Uninitialized Variables}
+
+\begin{lstlisting}[language=C, caption=Uninitialized variables contain garbage]
+int x;           // Contains garbage - whatever was in memory
+if (x > 0) {     // Undefined behavior!
+    // May or may not execute, unpredictably
+}
+
+float data[100]; // All 100 values are garbage
+float sum = 0;
+for (int i = 0; i < 100; i++) {
+    sum += data[i];  // Adding garbage!
+}
+
+// SOLUTION: Always initialize
+int y = 0;
+float values[100] = {0};  // All zeros
+\end{lstlisting}
+
+\subsection{String Handling}
+
+C strings are arrays of characters terminated by a null byte (\texttt{'\textbackslash 0'}):
+
+\begin{center}
+\begin{tabular}{p{0.45\textwidth}|p{0.45\textwidth}}
+\textbf{Python} & \textbf{C} \\
+\hline
+\begin{lstlisting}[language=Python, numbers=none]
+s = "Hello"
+t = s + " World"  # Easy concatenation
+print(len(s))     # 5
+\end{lstlisting}
+&
+\begin{lstlisting}[language=C, numbers=none]
+char s[] = "Hello";  // Actually 6 bytes: H e l l o \0
+char t[20];
+strcpy(t, s);        // Copy s to t
+strcat(t, " World"); // Append - DANGER if t too small!
+printf("%zu\n", strlen(s));  // 5 (not counting \0)
+\end{lstlisting}
+\end{tabular}
+\end{center}
+
+\begin{warningbox}
+Buffer overflows from string operations are a major source of security vulnerabilities. Always use safe functions like \texttt{strncpy} and \texttt{snprintf} that take a size limit, and ensure your buffers are large enough.
+\end{warningbox}
+
+\subsection{Assignment in Conditionals}
+
+\begin{lstlisting}[language=C, caption=Dangerous typo: = vs ==]
+int status = get_status();
+
+// WRONG - assigns 0 to status, then evaluates as false
+if (status = 0) {
+    // Never executed!
+}
+
+// CORRECT - compares status to 0
+if (status == 0) {
+    // Executed when status is zero
+}
+
+// Defensive style: put constant first (compiler warns on assignment)
+if (0 == status) {
+    // Can't accidentally assign to 0
+}
+\end{lstlisting}
+
+\subsection{Integer Division Truncation}
+
+\begin{lstlisting}[language=C, caption=Integer division surprise]
+// Calculate percentage
+int completed = 3;
+int total = 4;
+
+float percent = completed / total * 100;  // percent = 0.0 !
+// 3/4 = 0 (integer division), then 0*100 = 0
+
+float correct = (float)completed / total * 100;  // percent = 75.0
+\end{lstlisting}
+
+\subsection{Scope and Lifetime Confusion}
+
+\begin{lstlisting}[language=C, caption=Returning pointer to local variable]
+int* create_array(void) {
+    int arr[10];           // Local array on stack
+    arr[0] = 42;
+    return arr;            // DANGER: returning pointer to stack memory
+}  // arr is deallocated here!
+
+int* p = create_array();   // p points to deallocated memory
+printf("%d\n", p[0]);      // Undefined behavior!
+
+// SOLUTION: Allocate on heap
+int* create_array_safe(void) {
+    int *arr = (int*)calloc(10, sizeof(int));
+    if (arr != NULL) {
+        arr[0] = 42;
+    }
+    return arr;  // Caller must free this!
+}
+\end{lstlisting}
+
+\subsection{Summary: Key Differences from Python}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Aspect} & \textbf{Python} & \textbf{C} \\
+\midrule
+Typing & Dynamic & Static \\
+Memory & Garbage collected & Manual (malloc/free) \\
+Bounds checking & Yes (IndexError) & No (undefined behavior) \\
+Integer overflow & Arbitrary precision & Wraps or undefined \\
+Division & Returns float by default & Integer if both operands int \\
+Strings & Unicode objects & Null-terminated char arrays \\
+Error handling & Exceptions & Return codes, errno \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{keyidea}[title=The C Philosophy]
+C trusts the programmer. It doesn't check array bounds, doesn't initialize variables, doesn't manage memory---because all of these cost CPU cycles. For a flight controller running at 1000 Hz, every microsecond matters. C gives you complete control, but with that power comes responsibility for correctness.
+\end{keyidea}

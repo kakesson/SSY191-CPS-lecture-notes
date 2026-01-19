@@ -1,0 +1,462 @@
+% ============================================================================
+% REFERENCES FOR SSY191 LECTURE NOTES
+% Model-based Development of Cyber-Physical Systems
+% ============================================================================
+
+% ============================================================================
+% ATTITUDE REPRESENTATION AND QUATERNIONS
+% ============================================================================
+
+@article{shuster1993survey,
+  author    = {Shuster, Malcolm D.},
+  title     = {A Survey of Attitude Representations},
+  journal   = {The Journal of the Astronautical Sciences},
+  volume    = {41},
+  number    = {4},
+  pages     = {439--517},
+  year      = {1993}
+}
+
+@article{diebel2006representing,
+  author    = {Diebel, James},
+  title     = {Representing Attitude: {Euler} Angles, Unit Quaternions, and Rotation Vectors},
+  journal   = {Matrix},
+  volume    = {58},
+  number    = {15-16},
+  pages     = {1--35},
+  year      = {2006}
+}
+
+% ============================================================================
+% KALMAN FILTERING
+% ============================================================================
+
+@article{kalman1960new,
+  author    = {Kalman, Rudolf E.},
+  title     = {A New Approach to Linear Filtering and Prediction Problems},
+  journal   = {Journal of Basic Engineering},
+  volume    = {82},
+  number    = {1},
+  pages     = {35--45},
+  year      = {1960},
+  publisher = {ASME}
+}
+
+@article{kalman1961new,
+  author    = {Kalman, Rudolf E. and Bucy, Richard S.},
+  title     = {New Results in Linear Filtering and Prediction Theory},
+  journal   = {Journal of Basic Engineering},
+  volume    = {83},
+  number    = {1},
+  pages     = {95--108},
+  year      = {1961},
+  publisher = {ASME}
+}
+
+@book{brown2012introduction,
+  author    = {Brown, Robert Grover and Hwang, Patrick Y. C.},
+  title     = {Introduction to Random Signals and Applied {Kalman} Filtering},
+  edition   = {4th},
+  publisher = {John Wiley \& Sons},
+  year      = {2012}
+}
+
+@article{julier1997new,
+  author    = {Julier, Simon J. and Uhlmann, Jeffrey K.},
+  title     = {New Extension of the {Kalman} Filter to Nonlinear Systems},
+  booktitle = {Signal Processing, Sensor Fusion, and Target Recognition VI},
+  journal   = {Proceedings of SPIE},
+  volume    = {3068},
+  pages     = {182--193},
+  year      = {1997},
+  publisher = {SPIE}
+}
+
+@article{markley2003attitude,
+  author    = {Markley, F. Landis},
+  title     = {Attitude Error Representations for {Kalman} Filtering},
+  journal   = {Journal of Guidance, Control, and Dynamics},
+  volume    = {26},
+  number    = {2},
+  pages     = {311--317},
+  year      = {2003}
+}
+
+% ============================================================================
+% COMPLEMENTARY AND MAHONY FILTERS
+% ============================================================================
+
+@article{mahony2008nonlinear,
+  author    = {Mahony, Robert and Hamel, Tarek and Pflimlin, Jean-Michel},
+  title     = {Nonlinear Complementary Filters on the Special Orthogonal Group},
+  journal   = {IEEE Transactions on Automatic Control},
+  volume    = {53},
+  number    = {5},
+  pages     = {1203--1218},
+  year      = {2008},
+  publisher = {IEEE}
+}
+
+@inproceedings{madgwick2011estimation,
+  author    = {Madgwick, Sebastian O. H. and Harrison, Andrew J. L. and Vaidyanathan, Ravi},
+  title     = {Estimation of {IMU} and {MARG} Orientation Using a Gradient Descent Algorithm},
+  booktitle = {IEEE International Conference on Rehabilitation Robotics},
+  pages     = {1--7},
+  year      = {2011},
+  organization = {IEEE}
+}
+
+% ============================================================================
+% QUADROTOR DYNAMICS AND CONTROL
+% ============================================================================
+
+@book{mahony2012multirotor,
+  author    = {Mahony, Robert and Kumar, Vijay and Corke, Peter},
+  title     = {Multirotor Aerial Vehicles: Modeling, Estimation, and Control of Quadrotor},
+  journal   = {IEEE Robotics \& Automation Magazine},
+  volume    = {19},
+  number    = {3},
+  pages     = {20--32},
+  year      = {2012},
+  publisher = {IEEE}
+}
+
+@article{bouabdallah2007full,
+  author    = {Bouabdallah, Samir and Siegwart, Roland},
+  title     = {Full Control of a Quadrotor},
+  booktitle = {IEEE/RSJ International Conference on Intelligent Robots and Systems},
+  pages     = {153--158},
+  year      = {2007},
+  organization = {IEEE}
+}
+
+% ============================================================================
+% OPTIMAL CONTROL (LQR/LQG)
+% ============================================================================
+
+@book{anderson2007optimal,
+  author    = {Anderson, Brian D. O. and Moore, John B.},
+  title     = {Optimal Control: Linear Quadratic Methods},
+  publisher = {Dover Publications},
+  year      = {2007},
+  note      = {Originally published by Prentice-Hall, 1990}
+}
+
+@book{stengel1994optimal,
+  author    = {Stengel, Robert F.},
+  title     = {Optimal Control and Estimation},
+  publisher = {Dover Publications},
+  year      = {1994}
+}
+
+% ============================================================================
+% REAL-TIME SCHEDULING
+% ============================================================================
+
+@article{liu1973scheduling,
+  author    = {Liu, C. L. and Layland, James W.},
+  title     = {Scheduling Algorithms for Multiprogramming in a Hard-Real-Time Environment},
+  journal   = {Journal of the ACM},
+  volume    = {20},
+  number    = {1},
+  pages     = {46--61},
+  year      = {1973},
+  publisher = {ACM}
+}
+
+@article{sha1990priority,
+  author    = {Sha, Lui and Rajkumar, Ragunathan and Lehoczky, John P.},
+  title     = {Priority Inheritance Protocols: An Approach to Real-Time Synchronization},
+  journal   = {IEEE Transactions on Computers},
+  volume    = {39},
+  number    = {9},
+  pages     = {1175--1185},
+  year      = {1990},
+  publisher = {IEEE}
+}
+
+@inproceedings{sha1988real,
+  author    = {Sha, Lui and Rajkumar, Ragunathan and Lehoczky, John P.},
+  title     = {Real-Time Synchronization Protocols for Multiprocessors},
+  booktitle = {Proceedings of the IEEE Real-Time Systems Symposium},
+  pages     = {259--269},
+  year      = {1988},
+  organization = {IEEE}
+}
+
+@article{audsley1993applying,
+  author    = {Audsley, Neil C. and Burns, Alan and Richardson, Mike F. and Tindell, Ken and Wellings, Andy J.},
+  title     = {Applying New Scheduling Theory to Static Priority Pre-emptive Scheduling},
+  journal   = {Software Engineering Journal},
+  volume    = {8},
+  number    = {5},
+  pages     = {284--292},
+  year      = {1993}
+}
+
+@book{buttazzo2011hard,
+  author    = {Buttazzo, Giorgio C.},
+  title     = {Hard Real-Time Computing Systems: Predictable Scheduling Algorithms and Applications},
+  edition   = {3rd},
+  publisher = {Springer},
+  year      = {2011}
+}
+
+@article{jones1997mars,
+  author    = {Jones, Michael B.},
+  title     = {What Really Happened on {Mars}?},
+  note      = {Risks Digest, Volume 19, Issue 49},
+  year      = {1997},
+  url       = {http://catless.ncl.ac.uk/Risks/19.49.html}
+}
+
+% ============================================================================
+% HYBRID SYSTEMS
+% ============================================================================
+
+@incollection{henzinger1996theory,
+  author    = {Henzinger, Thomas A.},
+  title     = {The Theory of Hybrid Automata},
+  booktitle = {Verification of Digital and Hybrid Systems},
+  pages     = {265--292},
+  year      = {2000},
+  publisher = {Springer}
+}
+
+@article{alur1995algorithmic,
+  author    = {Alur, Rajeev and Courcoubetis, Costas and Halbwachs, Nicolas and Henzinger, Thomas A. and Ho, Pei-Hsin and Nicollin, Xavier and Olivero, Alfredo and Sifakis, Joseph and Yovine, Sergio},
+  title     = {The Algorithmic Analysis of Hybrid Systems},
+  journal   = {Theoretical Computer Science},
+  volume    = {138},
+  number    = {1},
+  pages     = {3--34},
+  year      = {1995},
+  publisher = {Elsevier}
+}
+
+@book{goebel2012hybrid,
+  author    = {Goebel, Rafal and Sanfelice, Ricardo G. and Teel, Andrew R.},
+  title     = {Hybrid Dynamical Systems: Modeling, Stability, and Robustness},
+  publisher = {Princeton University Press},
+  year      = {2012}
+}
+
+@inproceedings{branicky1998multiple,
+  author    = {Branicky, Michael S.},
+  title     = {Multiple {Lyapunov} Functions and Other Analysis Tools for Switched and Hybrid Systems},
+  journal   = {IEEE Transactions on Automatic Control},
+  volume    = {43},
+  number    = {4},
+  pages     = {475--482},
+  year      = {1998},
+  publisher = {IEEE}
+}
+
+% ============================================================================
+% MODELICA AND EQUATION-BASED MODELING
+% ============================================================================
+
+@book{fritzson2014principles,
+  author    = {Fritzson, Peter},
+  title     = {Principles of Object-Oriented Modeling and Simulation with {Modelica} 3.3},
+  edition   = {2nd},
+  publisher = {Wiley-IEEE Press},
+  year      = {2014}
+}
+
+@book{tiller2001introduction,
+  author    = {Tiller, Michael},
+  title     = {Introduction to Physical Modeling with {Modelica}},
+  publisher = {Springer},
+  year      = {2001}
+}
+
+% ============================================================================
+% NUMERICAL METHODS
+% ============================================================================
+
+@book{butcher2016numerical,
+  author    = {Butcher, John C.},
+  title     = {Numerical Methods for Ordinary Differential Equations},
+  edition   = {3rd},
+  publisher = {John Wiley \& Sons},
+  year      = {2016}
+}
+
+@book{hairer1993solving,
+  author    = {Hairer, Ernst and N{\o}rsett, Syvert P. and Wanner, Gerhard},
+  title     = {Solving Ordinary Differential Equations {I}: Nonstiff Problems},
+  edition   = {2nd},
+  publisher = {Springer},
+  year      = {1993}
+}
+
+@book{hairer1996solving,
+  author    = {Hairer, Ernst and Wanner, Gerhard},
+  title     = {Solving Ordinary Differential Equations {II}: Stiff and Differential-Algebraic Problems},
+  edition   = {2nd},
+  publisher = {Springer},
+  year      = {1996}
+}
+
+% ============================================================================
+% SIGNAL TEMPORAL LOGIC AND FALSIFICATION
+% ============================================================================
+
+@inproceedings{maler2004monitoring,
+  author    = {Maler, Oded and Nickovic, Dejan},
+  title     = {Monitoring Temporal Properties of Continuous Signals},
+  booktitle = {Formal Techniques, Modelling and Analysis of Timed and Fault-Tolerant Systems (FORMATS/FTRTFT)},
+  pages     = {152--166},
+  year      = {2004},
+  publisher = {Springer}
+}
+
+@inproceedings{donze2010robust,
+  author    = {Donz{\'e}, Alexandre and Maler, Oded},
+  title     = {Robust Satisfaction of Temporal Logic over Real-Valued Signals},
+  booktitle = {Formal Modeling and Analysis of Timed Systems (FORMATS)},
+  pages     = {92--106},
+  year      = {2010},
+  publisher = {Springer}
+}
+
+@article{fainekos2009robustness,
+  author    = {Fainekos, Georgios E. and Pappas, George J.},
+  title     = {Robustness of Temporal Logic Specifications for Continuous-Time Signals},
+  journal   = {Theoretical Computer Science},
+  volume    = {410},
+  number    = {42},
+  pages     = {4262--4291},
+  year      = {2009},
+  publisher = {Elsevier}
+}
+
+@inproceedings{donze2010breach,
+  author    = {Donz{\'e}, Alexandre},
+  title     = {Breach, A Toolbox for Verification and Parameter Synthesis of Hybrid Systems},
+  booktitle = {International Conference on Computer Aided Verification (CAV)},
+  pages     = {167--170},
+  year      = {2010},
+  publisher = {Springer}
+}
+
+@article{annpureddy2011s,
+  author    = {Annpureddy, Yashwanth and Liu, Che and Fainekos, Georgios and Sankaranarayanan, Sriram},
+  title     = {{S-TaLiRo}: A Tool for Temporal Logic Falsification for Hybrid Systems},
+  booktitle = {International Conference on Tools and Algorithms for the Construction and Analysis of Systems (TACAS)},
+  pages     = {254--257},
+  year      = {2011},
+  publisher = {Springer}
+}
+
+% ============================================================================
+% CODE COVERAGE AND TESTING
+% ============================================================================
+
+@article{chilenski1994applicability,
+  author    = {Chilenski, John Joseph and Miller, Steven P.},
+  title     = {Applicability of Modified Condition/Decision Coverage to Software Testing},
+  journal   = {Software Engineering Journal},
+  volume    = {9},
+  number    = {5},
+  pages     = {193--200},
+  year      = {1994},
+  publisher = {IET}
+}
+
+@techreport{do178c,
+  author    = {{RTCA}},
+  title     = {{DO-178C}: Software Considerations in Airborne Systems and Equipment Certification},
+  institution = {Radio Technical Commission for Aeronautics},
+  year      = {2011}
+}
+
+@techreport{iso26262,
+  author    = {{ISO}},
+  title     = {{ISO 26262}: Road Vehicles -- Functional Safety},
+  institution = {International Organization for Standardization},
+  year      = {2018},
+  edition   = {2nd}
+}
+
+% ============================================================================
+% CONTROL THEORY FUNDAMENTALS
+% ============================================================================
+
+@book{khalil2002nonlinear,
+  author    = {Khalil, Hassan K.},
+  title     = {Nonlinear Systems},
+  edition   = {3rd},
+  publisher = {Prentice Hall},
+  year      = {2002}
+}
+
+@book{astrom2010feedback,
+  author    = {{\AA}str{\"o}m, Karl Johan and Murray, Richard M.},
+  title     = {Feedback Systems: An Introduction for Scientists and Engineers},
+  publisher = {Princeton University Press},
+  year      = {2010}
+}
+
+@book{skogestad2005multivariable,
+  author    = {Skogestad, Sigurd and Postlethwaite, Ian},
+  title     = {Multivariable Feedback Control: Analysis and Design},
+  edition   = {2nd},
+  publisher = {John Wiley \& Sons},
+  year      = {2005}
+}
+
+% ============================================================================
+% EMBEDDED SYSTEMS AND RTOS
+% ============================================================================
+
+@book{barry2016mastering,
+  author    = {Barry, Richard},
+  title     = {Mastering the {FreeRTOS} Real Time Kernel},
+  publisher = {Real Time Engineers Ltd.},
+  year      = {2016}
+}
+
+@book{lee2017introduction,
+  author    = {Lee, Edward A. and Seshia, Sanjit A.},
+  title     = {Introduction to Embedded Systems: A Cyber-Physical Systems Approach},
+  edition   = {2nd},
+  publisher = {MIT Press},
+  year      = {2017}
+}
+
+% ============================================================================
+% V-MODEL AND DEVELOPMENT PROCESSES
+% ============================================================================
+
+@book{forsberg2005visualizing,
+  author    = {Forsberg, Kevin and Mooz, Hal and Cotterman, Howard},
+  title     = {Visualizing Project Management},
+  edition   = {3rd},
+  publisher = {John Wiley \& Sons},
+  year      = {2005}
+}
+
+% ============================================================================
+% SENSOR CALIBRATION
+% ============================================================================
+
+@article{tedaldi2014robust,
+  author    = {Tedaldi, David and Pretto, Alberto and Menegatti, Emanuele},
+  title     = {A Robust and Easy to Implement Method for {IMU} Calibration without External Equipments},
+  booktitle = {IEEE International Conference on Robotics and Automation (ICRA)},
+  pages     = {3042--3049},
+  year      = {2014},
+  organization = {IEEE}
+}
+
+@article{kok2017using,
+  author    = {Kok, Manon and Hol, Jeroen D. and Sch{\"o}n, Thomas B.},
+  title     = {Using Inertial Sensors for Position and Orientation Estimation},
+  journal   = {Foundations and Trends in Signal Processing},
+  volume    = {11},
+  number    = {1--2},
+  pages     = {1--153},
+  year      = {2017}
+}

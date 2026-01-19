@@ -1,0 +1,285 @@
+%======================================================================
+% APPENDIX: Embedded Number Representation
+%
+% This appendix covers how numbers are represented in embedded processors
+% that run quadrotor flight controllers.
+%======================================================================
+
+\chapter{Embedded Number Representation}
+
+\section{Introduction: Why Number Representation Matters}
+
+When we write mathematical equations for control systems, we implicitly assume real numbers with infinite precision. But computers represent numbers with finite bits, introducing several complications:
+
+\begin{itemize}
+    \item \textbf{Limited range}: Numbers can only be so large or small before overflow or underflow
+    \item \textbf{Limited precision}: Most real numbers cannot be represented exactly
+    \item \textbf{Special values}: Operations can produce infinity, negative zero, or ``not a number''
+    \item \textbf{Performance tradeoffs}: Different representations have different computational costs
+\end{itemize}
+
+\textbf{Why this matters for quadrotors}: A control loop running at 500 Hz performs millions of arithmetic operations per hour. Subtle numerical issues can accumulate:
+\begin{itemize}
+    \item Integrator windup from accumulated rounding errors
+    \item NaN propagation that disables the entire controller
+    \item Unexpected behavior at extreme attitudes (gimbal lock at $\pm 90°$ pitch)
+    \item Different results between simulation and embedded code
+\end{itemize}
+
+Understanding number representation helps you anticipate and prevent these issues.
+
+\begin{notebox}[title=Context for This Material]
+This appendix covers how numbers are represented in the embedded processors that run quadrotor flight controllers. The focus is on practical implications for control system implementation, not a comprehensive treatment of computer arithmetic.
+\end{notebox}
+
+\section{The Crazyflie Hardware Platform}
+
+The Crazyflie 2.x uses two processors:
+
+\textbf{Main processor (STM32F405)}:
+\begin{itemize}
+    \item ARM Cortex-M4 core at 168 MHz
+    \item \textbf{Hardware floating-point unit (FPU)}: Single-precision (32-bit) IEEE 754
+    \item 196 KB RAM, 1 MB Flash
+    \item Runs FreeRTOS with control algorithms
+\end{itemize}
+
+\textbf{Radio processor (nRF51822)}:
+\begin{itemize}
+    \item ARM Cortex-M0 core at 16 MHz
+    \item \textbf{No FPU}: All floating-point is emulated in software (slow!)
+    \item 16 KB RAM, 256 KB Flash
+    \item Handles wireless communication
+\end{itemize}
+
+\begin{keyidea}[title=Why This Matters]
+The main processor can do floating-point math quickly (hardware FPU). The radio processor cannot. If you accidentally run floating-point code on the wrong processor, performance collapses.
+\end{keyidea}
+
+\section{Integer Representation}
+
+\subsection{Unsigned Integers}
+
+An $N$-bit unsigned integer represents values $0$ to $2^N - 1$:
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Type} & \textbf{Bits} & \textbf{Range} \\
+\midrule
+\texttt{uint8\_t} & 8 & 0 to 255 \\
+\texttt{uint16\_t} & 16 & 0 to 65,535 \\
+\texttt{uint32\_t} & 32 & 0 to 4,294,967,295 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Binary representation of 11 in 8 bits:
+\[
+11 = 0 \cdot 2^7 + 0 \cdot 2^6 + 0 \cdot 2^5 + 0 \cdot 2^4 + 1 \cdot 2^3 + 0 \cdot 2^2 + 1 \cdot 2^1 + 1 \cdot 2^0
+\]
+\[
+\texttt{00001011}_2 = 11_{10}
+\]
+
+\subsection{Signed Integers: Two's Complement}
+
+Negative numbers use \textbf{two's complement} representation:
+
+\begin{definition}[Two's Complement]
+To negate a number: invert all bits and add 1.
+\end{definition}
+
+\begin{example}
+Represent $-5$ in 8 bits:
+\begin{enumerate}
+    \item Start with $+5$: \texttt{00000101}
+    \item Invert bits: \texttt{11111010}
+    \item Add 1: \texttt{11111011}
+\end{enumerate}
+So $-5$ is represented as \texttt{11111011}.
+\end{example}
+
+\textbf{Why two's complement?}
+\begin{itemize}
+    \item Addition and subtraction use the same hardware circuit
+    \item Only one representation of zero
+    \item The most significant bit indicates sign (1 = negative)
+\end{itemize}
+
+Range of $N$-bit signed integer: $-2^{N-1}$ to $2^{N-1} - 1$
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Type} & \textbf{Bits} & \textbf{Range} \\
+\midrule
+\texttt{int8\_t} & 8 & $-128$ to $127$ \\
+\texttt{int16\_t} & 16 & $-32,768$ to $32,767$ \\
+\texttt{int32\_t} & 32 & $-2,147,483,648$ to $2,147,483,647$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Floating-Point Representation (IEEE 754)}
+
+Floating-point representation is the standard way to represent real numbers in computers. The IEEE 754 standard, established in 1985 and revised in 2008, ensures consistent behavior across different processors and programming languages.
+
+\textbf{Intuition}: Floating-point is like scientific notation. Instead of writing $0.000000123$, we write $1.23 \times 10^{-7}$. The ``significand'' (1.23) provides precision, and the ``exponent'' ($-7$) provides range. Binary floating-point works the same way, using powers of 2 instead of powers of 10.
+
+\subsection{Structure}
+
+A floating-point number has three fields:
+
+\begin{center}
+\begin{tabular}{|c|c|c|}
+\hline
+Sign (1 bit) & Exponent ($E$ bits) & Fraction ($F$ bits) \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Precision} & \textbf{Total bits} & \textbf{Exponent} & \textbf{Fraction} \\
+\midrule
+Single (\texttt{float}) & 32 & 8 & 23 \\
+Double (\texttt{double}) & 64 & 11 & 52 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Value Calculation}
+
+For a normalized number:
+\[
+\text{Value} = (-1)^{\text{sign}} \times 2^{\text{exponent} - \text{bias}} \times (1 + \text{fraction})
+\]
+
+where:
+\begin{itemize}
+    \item Bias = 127 for single precision, 1023 for double
+    \item Fraction is interpreted as $0.b_1b_2b_3\ldots$ in binary
+    \item The leading 1 is implicit (not stored)
+\end{itemize}
+
+\begin{example}
+Decode \texttt{0 10000010 10100000000000000000000}:
+\begin{itemize}
+    \item Sign = 0 (positive)
+    \item Exponent = \texttt{10000010}$_2$ = 130, so actual exponent = $130 - 127 = 3$
+    \item Fraction = \texttt{.101}$_2$ = $0.5 + 0.125 = 0.625$
+    \item Value = $1 \times 2^3 \times (1 + 0.625) = 8 \times 1.625 = 13.0$
+\end{itemize}
+\end{example}
+
+\subsection{Special Values}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Value} & \textbf{Exponent} & \textbf{Fraction} \\
+\midrule
+Zero ($\pm 0$) & All 0s & All 0s \\
+Infinity ($\pm \infty$) & All 1s & All 0s \\
+NaN (Not a Number) & All 1s & Non-zero \\
+Denormalized & All 0s & Non-zero \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Operations with special values}:
+\begin{itemize}
+    \item $x / 0 = \pm\infty$ (for $x \neq 0$)
+    \item $0 / 0 = $ NaN
+    \item $\infty - \infty = $ NaN
+    \item Any operation with NaN $=$ NaN
+\end{itemize}
+
+\begin{warningbox}[title=NaN Propagation]
+If a NaN appears anywhere in your computation, it propagates to all dependent outputs. In a control system, this means:
+\begin{itemize}
+    \item One bad sensor reading can produce NaN
+    \item NaN propagates through the controller
+    \item Motor commands become NaN
+    \item Quadrotor crashes
+\end{itemize}
+Always validate sensor inputs and check for NaN in critical paths!
+\end{warningbox}
+
+\subsection{Precision Limitations}
+
+\begin{notebox}[title=Not All Numbers Are Representable]
+Many decimal numbers have no exact binary floating-point representation.
+
+\textbf{Example}: $0.1_{10}$ in binary is $0.0001100110011\ldots$ (repeating). The stored value is approximately $0.100000001490116$.
+
+For most control applications, this error is negligible. But be aware when:
+\begin{itemize}
+    \item Comparing floating-point numbers for equality
+    \item Accumulating many small values
+    \item Working near the limits of precision
+\end{itemize}
+\end{notebox}
+
+\section{Fixed-Point Arithmetic}
+
+\subsection{When to Use Fixed-Point}
+
+Fixed-point is useful when:
+\begin{itemize}
+    \item No hardware FPU available
+    \item Deterministic timing required
+    \item Memory is very limited
+\end{itemize}
+
+\subsection{Q-Format Notation}
+
+Q$m.n$ format: $m$ integer bits, $n$ fractional bits.
+
+\begin{example}
+Q3.4 format (7 bits total, signed):
+\begin{itemize}
+    \item Range: $-8$ to $7.9375$
+    \item Resolution: $2^{-4} = 0.0625$
+\end{itemize}
+
+To convert $3.25$ to Q3.4:
+\[
+3.25 \times 2^4 = 52 = \texttt{0110100}_2
+\]
+
+To convert back:
+\[
+52 / 2^4 = 3.25
+\]
+\end{example}
+
+\subsection{Fixed-Point Operations}
+
+\textbf{Addition/Subtraction}: Same format, direct operation.
+
+\textbf{Multiplication}: Result has $2n$ fractional bits; must shift right by $n$.
+
+\begin{lstlisting}[language=C, caption=Fixed-point multiply in Q15]
+int16_t fixed_mul_q15(int16_t a, int16_t b) {
+    int32_t result = (int32_t)a * (int32_t)b;
+    return (int16_t)(result >> 15);
+}
+\end{lstlisting}
+
+\begin{keyidea}[title=Modern Recommendation]
+For the Crazyflie (Cortex-M4 with FPU), use \texttt{float} for all control computations. Fixed-point is only needed on processors without FPU or for extremely timing-critical code.
+\end{keyidea}
+
+\section{Summary}
+
+Understanding number representation helps write robust embedded code:
+
+\begin{itemize}
+    \item \textbf{Integers}: Two's complement for signed; watch for overflow
+    \item \textbf{Floating-point}: IEEE 754; watch for NaN, infinity, precision limits
+    \item \textbf{Fixed-point}: Use when no FPU; requires careful scaling
+    \item \textbf{Practical advice}: Use \texttt{float} on Cortex-M4; validate inputs; check for NaN
+\end{itemize}

@@ -1,0 +1,2354 @@
+% !TEX program = lualatex
+\documentclass[11pt, a4paper, oneside]{book}
+
+% ===== Fonts and Language =====
+\usepackage{fontspec}
+\usepackage{polyglossia}
+\setdefaultlanguage{english}
+
+% ===== Math =====
+\usepackage{amsmath, amssymb, amsthm}
+
+% ===== Graphics and Layout =====
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{geometry}
+\geometry{margin=1in}
+
+% ===== Hyperlinks =====
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    urlcolor=cyan,
+    citecolor=green
+}
+
+% ===== Chapter and Section Formatting =====
+\usepackage{titlesec}
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries}{\chaptertitlename\ \thechapter}{20pt}{\Huge}
+\titlespacing*{\chapter}{0pt}{-30pt}{40pt}
+
+% ===== Headers and Footers =====
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\leftmark}
+\fancyhead[R]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ===== Theorem Environments =====
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[chapter]
+\newtheorem{example}{Example}[chapter]
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[chapter]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}[chapter]
+
+% ===== Boxes =====
+\usepackage{tcolorbox}
+\tcbuselibrary{skins, breakable}
+\newtcolorbox{keyidea}[1][]{
+  colback=blue!5!white,
+  colframe=blue!75!black,
+  fonttitle=\bfseries,
+  title=Key Idea,
+  #1
+}
+\newtcolorbox{notebox}[1][]{
+  colback=yellow!10!white,
+  colframe=yellow!50!black,
+  fonttitle=\bfseries,
+  title=Note,
+  #1
+}
+\newtcolorbox{warningbox}[1][]{
+  colback=red!5!white,
+  colframe=red!75!black,
+  fonttitle=\bfseries,
+  title=Warning,
+  #1
+}
+
+% ===== Code Listings =====
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue},
+  commentstyle=\color{green!60!black},
+  stringstyle=\color{red},
+  showstringspaces=false,
+  breaklines=true,
+  frame=single,
+  numbers=left,
+  numberstyle=\tiny\color{gray}
+}
+
+% ===== Tables =====
+\usepackage{booktabs}
+\usepackage{multirow}
+
+% ===== Custom Commands =====
+\newcommand{\lecture}[3]{%
+  \chapter*{Lecture #1: #2}%
+  \addcontentsline{toc}{chapter}{Lecture #1: #2}%
+  \markboth{Lecture #1: #2}{}%
+  \textbf{Date:} #3\par
+  \vspace{0.5em}\hrule\vspace{1em}
+}
+
+% ===== Title =====
+\title{Model-based Development of Cyber-Physical Systems\\[0.5em]\large Lecture Notes -- SSY191}
+\author{Knut \AA kesson\\
+Department of Electrical Engineering\\
+Chalmers University of Technology}
+\date{Spring 2024}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+
+%======================================================================
+\lecture{2}{Modelling of Quadrotors}{Spring 2024}
+%======================================================================
+
+\section{Introduction to Quadrotor Modelling}
+
+The pose of a flying object (position + orientation) can be represented by a vector with 6 components:
+\begin{equation}
+(x, y, z, \text{roll}, \text{pitch}, \text{yaw})
+\end{equation}
+This represents 6 degrees of freedom (6 DOF).
+
+\subsection{Orientation (Roll, Pitch, Yaw)}
+
+An aircraft is free to rotate in three dimensions:
+\begin{itemize}
+    \item \textbf{Yaw axis ($\psi$):} Has its origin at COG (Center of Gravity) and is directed towards the bottom of the aircraft.
+    \item \textbf{Pitch axis ($\theta$):} Origin at COG and is directed from wingtip to wingtip.
+    \item \textbf{Roll axis ($\phi$):} Origin at COG and directed forward.
+\end{itemize}
+
+The right-hand rule is used for positive directions of rotations.
+
+% [Figure omitted: Aircraft with roll, pitch, and yaw axes indicated]
+
+\section{Quadrotors}
+
+\subsection{Configurations}
+
+Quadrotors come in two main configurations:
+\begin{itemize}
+    \item \textbf{X-configuration:} The rotors are arranged in an X pattern relative to the forward direction.
+    \item \textbf{+-configuration:} The rotors are arranged in a + pattern relative to the forward direction.
+\end{itemize}
+
+% [Figure omitted: X and + configurations with rotor positions]
+
+If a rotor spins in one direction, the body will rotate in the opposite direction. When opposing motors spin in the same direction, but opposite of the other pair, thrust, roll, pitch, and yaw can be individually controlled.
+
+\begin{notebox}
+A quadrotor is \emph{underactuated} (6 DOF, 4 control signals). Thus, before going in a certain direction, the quadrotor needs to rotate towards that direction.
+\end{notebox}
+
+\subsection{Quadrotor Control (+ Configuration)}
+
+For a +-configuration quadrotor with motors $M_A$ (front), $M_B$ (right), $M_C$ (back), and $M_D$ (left):
+
+\begin{center}
+\begin{tabular}{l|cccc}
+\toprule
+Action & $M_A$ & $M_B$ & $M_C$ & $M_D$ \\
+\midrule
+To rotate clockwise & $-$ & $+$ & $-$ & $+$ \\
+To go up & $+$ & $+$ & $+$ & $+$ \\
+To go forward & $-$ & $\cdot$ & $+$ & $\cdot$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Note: ``$\cdot$'' means do not change.
+
+\section{Estimating the Pose (Position + Orientation)}
+
+\subsection{Inertial Sensors}
+
+Inertial Measurement Units (IMU) consist of:
+\begin{itemize}
+    \item 3-axis accelerometer
+    \item 3-axis gyroscope
+\end{itemize}
+
+\subsubsection{Gyroscope}
+A gyroscope measures the \emph{angular velocity}, i.e., rate of change of the sensor's orientation.
+
+\subsubsection{Accelerometer}
+An accelerometer measures the \emph{external specific force} acting on the sensor. The specific force consists of both the sensor's acceleration and earth's gravity, i.e.,
+\begin{equation}
+a = a_g + a_e
+\end{equation}
+
+When the object is at rest, it measures the gravity vector $a = a_g$ with magnitude $9.81$ m/s$^2$ = 1$g$.
+
+\section{Dead-Reckoning}
+
+Assume we start with a known pose, then we can estimate future poses by using the IMU.
+
+The process involves:
+\begin{enumerate}
+    \item Gyroscope $\xrightarrow{\text{angular velocity}}$ Integration $\rightarrow$ Orientation
+    \item Accelerometer $\rightarrow$ Rotate $\rightarrow$ Remove gravity $\rightarrow$ Body acceleration $\xrightarrow{\int\int}$ Position
+\end{enumerate}
+
+To be able to remove gravity, the orientation needs to be known.
+
+\begin{warningbox}
+All sensors are noisy and have a bias (could be temperature dependent) which causes \emph{integration drift}. Both orientation and position will deviate away from their true values over time.
+\end{warningbox}
+
+We will later see how a \emph{complementary filter} can be implemented to deal with this problem.
+
+\section{Rigid Body Transformations}
+
+\begin{definition}
+\begin{description}
+    \item[Translation:] Change in position
+    \item[Rotation:] Change in orientation
+    \item[Transform:] Translation + Rotation
+\end{description}
+\end{definition}
+
+\subsection{2D Transformations}
+
+To represent a mobile robot in 2D, three coordinates are needed: $(x, y, \theta)$.
+
+Note that the pose is always with respect to a coordinate frame.
+
+The pose of the robot (body) can be described by the position and orientation of $\{B\}$ w.r.t.\ $\{W\}$.
+
+Let ${}^W\xi_B$ be the relative pose of the body with respect to the world.
+\begin{itemize}
+    \item The superscript denotes the reference coordinate frame
+    \item The subscript denotes the frame being described
+\end{itemize}
+
+If the superscript is missing, it is with respect to the world frame.
+
+\subsection{Representation of a Point}
+
+The point $P$ can be described with respect to either frame:
+\begin{equation}
+{}^W P = {}^W\xi_B \cdot {}^B P
+\end{equation}
+
+Same point expressed w.r.t.\ two different coordinate frames.
+
+Note that this can be applied sequentially:
+\begin{equation}
+{}^A\xi_C = {}^A\xi_B \oplus {}^B\xi_C
+\end{equation}
+
+\subsection{For a 2D Robot}
+
+To describe coordinate frame $\{B\}$ with reference frame $\{W\}$ we have:
+\begin{enumerate}
+    \item The origin of $\{B\}$ has been displaced by the vector $t = (x, y)^T$ --- ``Translation''
+    \item $\{B\}$ has been rotated counter-clockwise by the angle $\theta$ --- ``Rotation''
+\end{enumerate}
+
+\subsection{Rotation Matrix}
+
+The rotation from body to world coordinates is given by:
+\begin{equation}
+\begin{bmatrix} {}^V x \\ {}^V y \end{bmatrix} =
+\underbrace{\begin{bmatrix} \cos(\theta) & -\sin(\theta) \\ \sin(\theta) & \cos(\theta) \end{bmatrix}}_{{}^V R_B(\theta)}
+\begin{bmatrix} {}^B x \\ {}^B y \end{bmatrix}
+\end{equation}
+
+Let
+\begin{equation}
+R(\theta) = \begin{bmatrix} \cos(\theta) & -\sin(\theta) \\ \sin(\theta) & \cos(\theta) \end{bmatrix}
+\end{equation}
+
+Properties of the rotation matrix:
+\begin{itemize}
+    \item $\det(R(\theta)) = 1$
+    \item $R(-\theta) = \begin{bmatrix} \cos(\theta) & \sin(\theta) \\ -\sin(\theta) & \cos(\theta) \end{bmatrix} = R^T(\theta) \Rightarrow R^{-1} = R^T$
+\end{itemize}
+
+For 2D rotations: $R(\theta_1)R(\theta_2) = R(\theta_2)R(\theta_1)$
+
+\begin{warningbox}
+This is \emph{no longer true} when you do rotations in 3D.
+\end{warningbox}
+
+\subsection{Translation}
+
+$\{W\}$ and $\{V\}$ have parallel coordinate axes.
+
+\begin{equation}
+{}^W P = \begin{bmatrix} {}^W x \\ {}^W y \end{bmatrix} =
+\begin{bmatrix} {}^V x \\ {}^V y \end{bmatrix} +
+\begin{bmatrix} x \\ y \end{bmatrix}
+\end{equation}
+
+Combining rotation and translation:
+\begin{equation}
+= \underbrace{\begin{bmatrix} \cos(\theta) & -\sin(\theta) \\ \sin(\theta) & \cos(\theta) \end{bmatrix}}_{\text{Rotation}}
+\begin{bmatrix} {}^B x \\ {}^B y \end{bmatrix} +
+\underbrace{\begin{bmatrix} x \\ y \end{bmatrix}}_{\text{Translation}}
+\end{equation}
+
+Using homogeneous coordinates:
+\begin{equation}
+\begin{bmatrix} {}^W x \\ {}^W y \\ 1 \end{bmatrix} =
+\begin{bmatrix} \cos(\theta) & -\sin(\theta) & x \\ \sin(\theta) & \cos(\theta) & y \\ 0 & 0 & 1 \end{bmatrix}
+\begin{bmatrix} {}^B x \\ {}^B y \\ 1 \end{bmatrix}
+\end{equation}
+
+%======================================================================
+\lecture{3}{3D Transformations and Euler Angles}{Spring 2024}
+%======================================================================
+
+\section{Coordinate Transformation Examples}
+
+\begin{example}[From body coordinate to world coordinate]
+${}^B p = (1, 0)$
+
+Translation of ${}^B$ with respect to $W$ in the x-direction:
+
+\[
+\begin{bmatrix} w_x \\ w_y \\ 1 \end{bmatrix} =
+\begin{bmatrix} \cos(30^\circ) & -\sin(30^\circ) & 2 \\ \sin(30^\circ) & \cos(30^\circ) & 1 \\ 0 & 0 & 1 \end{bmatrix}
+\begin{bmatrix} 1 \\ 0 \\ 1 \end{bmatrix} =
+\begin{bmatrix} \frac{\sqrt{3}}{2} + 2 \\ \frac{3}{2} \\ 1 \end{bmatrix}
+\]
+\end{example}
+
+\begin{example}[From world coordinate to body coordinate]
+${}^w p = (2, 1)$
+
+Remark: $\begin{bmatrix} R & d \\ 0 & 1 \end{bmatrix}^{-1} = \begin{bmatrix} R^{-1} & -R^{-1}d \\ 0 & 1 \end{bmatrix}$
+
+When $R$ is a rotation matrix: $R^{-1} = R^T$
+
+\[
+\begin{bmatrix} B_x \\ B_y \\ 1 \end{bmatrix} =
+\begin{bmatrix} \frac{\sqrt{3}}{2} & \frac{1}{2} & -(\sqrt{3}+\frac{1}{2}) \\ -\frac{1}{2} & \frac{\sqrt{3}}{2} & 1-\frac{\sqrt{3}}{2} \\ 0 & 0 & 1 \end{bmatrix}
+\begin{bmatrix} 2 \\ 1 \\ 1 \end{bmatrix} =
+\begin{bmatrix} 0 \\ 0 \\ 1 \end{bmatrix}
+\]
+\end{example}
+
+\section{3D Transformations}
+
+\begin{keyidea}
+In 3D the rotation order matters.
+\end{keyidea}
+
+\textbf{Case A:}
+\begin{itemize}
+\item[i)] Rotate $90^\circ$, first about x and then y axis.
+\item[ii)] Rotate $90^\circ$ about the y-axis.
+\end{itemize}
+
+\textbf{Case B:}
+\begin{itemize}
+\item[i)] Rotate $90^\circ$ about the y-axis
+\item[ii)] Rotate $90^\circ$ about the x-axis
+\end{itemize}
+
+The results are different!
+
+\section{Rotation in 3D around Different Axes}
+
+Rotation of $\alpha$ about x-axis:
+\[
+\begin{bmatrix} x' \\ y' \\ z' \end{bmatrix} =
+\begin{bmatrix} 1 & 0 & 0 \\ 0 & \cos(\alpha) & -\sin(\alpha) \\ 0 & \sin(\alpha) & \cos(\alpha) \end{bmatrix}
+\begin{bmatrix} x \\ y \\ z \end{bmatrix}
+\quad R_x(\alpha)
+\]
+
+Rotation of $\alpha$ about y-axis:
+\[
+\begin{bmatrix} x' \\ y' \\ z' \end{bmatrix} =
+\begin{bmatrix} \cos(\alpha) & 0 & \sin(\alpha) \\ 0 & 1 & 0 \\ -\sin(\alpha) & 0 & \cos(\alpha) \end{bmatrix}
+\begin{bmatrix} x \\ y \\ z \end{bmatrix}
+\quad R_y(\alpha)
+\]
+
+Rotation of $\alpha$ about z-axis:
+\[
+\begin{bmatrix} x' \\ y' \\ z' \end{bmatrix} =
+\begin{bmatrix} \cos(\alpha) & -\sin(\alpha) & 0 \\ \sin(\alpha) & \cos(\alpha) & 0 \\ 0 & 0 & 1 \end{bmatrix}
+\begin{bmatrix} x \\ y \\ z \end{bmatrix}
+\quad R_z(\alpha)
+\]
+
+\begin{theorem}[Euler rotation theorem]
+Any rotation can be represented by not more than three rotations about coordinate axes.
+\end{theorem}
+
+\section{Euler Angles (Three Angle Representation)}
+
+Three different axes might be used for the rotations (Tait-Bryan Angles):
+
+Possible rotation sequences: $xyz$, $xzy$, $yxz$, $yzx$, $zxy$, $zyx$
+
+Same axis might also be used for first and last rotation (Proper Euler Angles):
+
+Possible rotation sequences: $xyx$, $xzx$, $yxy$, $yzy$, $zxz$, $zyz$
+
+Any of these 12 rotation sequences can represent any 3D-rotation.
+
+\section{Intrinsic vs. Extrinsic Rotation}
+
+\begin{definition}
+In an \textbf{intrinsic} system each of elemental rotations is performed on the coordinate system as rotated by the previous operation.
+\end{definition}
+
+\begin{definition}
+In an \textbf{extrinsic} system each of the rotations is performed around the axes of the world coordinate system.
+\end{definition}
+
+\begin{keyidea}
+Intrinsic rotations can be converted to its extrinsic equivalent by reversing the order of the elemental rotations.
+
+For intrinsic rotations we use post-multiplication of rotation matrices.
+\end{keyidea}
+
+\section{ZYX Rotation Example}
+
+$\varphi$: roll, $\theta$: pitch, $\psi$: yaw
+
+Intrinsic rotation with rotation order ZYX:
+
+$R_{ZYX}(\psi, \theta, \varphi) = R_z(\psi) \cdot R_y(\theta) \cdot R_x(\varphi) =$
+
+\[
+\begin{bmatrix}
+c(\psi)c(\theta) & c(\psi)s(\theta)s(\varphi) - c(\varphi)s(\psi) & s(\varphi)s(\psi) + c(\varphi)c(\psi)s(\theta) \\
+c(\theta)s(\psi) & c(\varphi)c(\psi) + s(\varphi)s(\psi)s(\theta) & c(\varphi)s(\psi)s(\theta) - c(\psi)s(\varphi) \\
+-s(\theta) & c(\theta)s(\varphi) & c(\varphi)c(\theta)
+\end{bmatrix}
+\]
+
+where $c = \cos$, $s = \sin$
+
+\section{Computing Roll, Pitch, and Yaw from Rotation Matrix}
+
+From $r_{31} = -s(\theta)$ we can solve for $\theta$:
+
+pitch angle $\theta = -\arcsin(r_{31}) \Rightarrow \theta \in \left[-\frac{\pi}{2}, \frac{\pi}{2}\right]$
+
+To solve for yaw angle $\psi$ consider $\frac{r_{21}}{r_{11}} = \frac{c(\theta)s(\psi)}{c(\psi)c(\theta)} = \tan(\psi)$
+
+$\Rightarrow \psi = \arctan\left(\frac{r_{21}}{r_{11}}\right)$
+
+Better to calculate it as $\text{atan2}(r_{21}, r_{11})$
+
+\begin{notebox}
+\begin{itemize}
+\item atan2 will keep track of the quadrant
+\item $\arctan\left(\frac{1}{1}\right) = \arctan\left(\frac{-1}{-1}\right)$ but
+\item $\text{atan2}(1, 1) = \frac{\pi}{4}$
+\item $\text{atan2}(-1, -1) = -\frac{3\pi}{4}$
+\end{itemize}
+\end{notebox}
+
+To compute roll angle $(\varphi)$, consider $\frac{r_{32}}{r_{33}} = \frac{c(\theta)s(\varphi)}{c(\varphi)c(\theta)} = \tan(\varphi)$
+
+$\varphi = \text{atan2}(r_{32}, r_{33})$
+
+\begin{warningbox}[title=Gimbal Lock]
+If pitch angle $\theta = \pm\frac{\pi}{2}$ then $c(\theta) = 0$ and $r_{11} = r_{21} = r_{31} = r_{32} = 0$ and we cannot compute yaw and roll.
+\end{warningbox}
+
+\section{Estimate Roll and Pitch Using 3-axis Accelerometer}
+
+The accelerometer measures ${}^B f_x$, ${}^B f_y$, ${}^B f_z$
+
+\[
+\begin{bmatrix} {}^B f_x \\ {}^B f_y \\ {}^B f_z \end{bmatrix} =
+{}^B R_w \left( \begin{bmatrix} {}^w a_x \\ {}^w a_y \\ {}^w a_z \end{bmatrix} - \begin{bmatrix} 0 \\ 0 \\ g \end{bmatrix} \right)
+\]
+
+If body at rest then ${}^w a_x = {}^w a_y = {}^w a_z = 0$ and we can then use the readings ${}^B f_x$, ${}^B f_y$, ${}^B f_z$ to estimate ${}^B R_w$
+
+%======================================================================
+\lecture{4}{Complementary Filter and Quadrotor Dynamics}{Spring 2024}
+%======================================================================
+
+\section{Pitch and Roll Estimation from Accelerometer Readings}
+
+$\varphi$: roll, $\theta$: pitch, $\psi$: yaw
+
+\[
+{}^B f = {}^B_m R_w \left( \begin{bmatrix} {}^w a_x \\ {}^w a_y \\ {}^w a_z \end{bmatrix} - \begin{bmatrix} 0 \\ 0 \\ g \end{bmatrix} \right)
+\]
+
+${}^B R_w$ depends on $\varphi, \theta, \psi$
+
+Given ${}^B R_w$ if we want to estimate $\varphi, \theta, \psi$
+
+Assume body is at rest (${}^w a_x = {}^w a_y = {}^w a_z = 0$) and the accelerometer is calibrated to give $-1$ when aligned with earth's gravitational field.
+
+\[
+\begin{bmatrix} {}^B f_x \\ {}^B f_y \\ {}^B f_z \end{bmatrix} = {}^B_m R_w \begin{bmatrix} 0 \\ 0 \\ -1 \end{bmatrix}
+\]
+
+\section{Deriving Roll and Pitch from Rotation Matrix}
+
+From last lecture we know that for 3D the rotation order matters (12 possible orders). It is also important to specify intrinsic or extrinsic rotation.
+
+We have that ${}^w p = {}^w R_B \cdot {}^B p \Rightarrow {}^B p = ({}^w R_B)^{-1} \cdot {}^w p = ({}^w R_B)^T \cdot p$
+
+$\Rightarrow {}^B R_w = ({}^w R_B)^T$
+
+We will use $R_{zyx}$ = Roll-Pitch-Yaw (XYZ) rotation order, with extrinsic rotation order (use pre-multiplication order)
+
+${}^w R_B = R_z(\psi) \cdot R_y(\theta) \cdot R_x(\varphi)$
+
+\section{Computing Roll and Pitch}
+
+Given: $\frac{{}^B f_x}{{}^B f_y}, \frac{{}^B f_y}{{}^B f_z}$
+
+Solve for roll $(\varphi)$ and pitch $(\theta)$:
+
+$\frac{{}^B f_y}{{}^B f_z} = \frac{s(\varphi)c(\theta)}{c(\varphi)c(\theta)} = \tan(\varphi) \Rightarrow \varphi = \text{atan2}({}^B f_y, {}^B f_z)$
+
+Solve for $\theta$:
+
+$\tan \theta = \frac{\sin(\theta)}{\cos(\theta)} = \frac{-{}^B f_x}{\sqrt{({}^B f_y)^2 + ({}^B f_z)^2}}$
+
+$\theta = \text{atan2}\left(-{}^B f_x, \sqrt{({}^B f_y)^2 + ({}^B f_z)^2}\right)$
+
+\section{Complementary Filter}
+
+\begin{keyidea}
+\textbf{Accelerometer:} The orientation estimations from the accelerometer are noisy (affected by the body's acceleration) but accurate over long periods of time or when the body is not accelerating.
+
+\textbf{Gyro:} Accurate over short term but sensitive to drift over time.
+
+\textbf{Idea:} Rely on gyro in the short term and on the accelerometer in the long run.
+\end{keyidea}
+
+\textbf{Complementary filter:} Filter the gyro estimation of the angle through a high-pass filter and the accelerometer through a low-pass filter.
+
+\subsection{Implementation}
+
+Let $\theta_a$: angle estimate from the accelerometer.
+
+$\theta_g$: angle estimation from gyro, $\theta_g = \int_0^t \dot{\theta}_g \, dt$ (measured from gyro)
+
+Let $G(s) = \frac{\alpha}{\alpha s + 1}$ (Low-pass filter)
+
+$1 - G(s) = 1 - \frac{1}{\alpha s + 1} = \frac{\alpha s}{\alpha s + 1}$ (High-pass filter)
+
+Let $\theta$ be the estimation from the complementary filter:
+
+$\theta(s) = G(s) \cdot \theta_a(s) + (1 - G(s)) \cdot \theta_g(s)$
+
+$\theta_g(s) = \frac{1}{s} V_g(s)$ (Laplace transform of angular velocity)
+
+Discrete using Euler-backward: $x(kh) \approx x((k-1)h)$
+
+$h$: sampling period
+
+\begin{equation}
+\hat{\theta}_k = (1-\gamma) \theta_{a,k} + \gamma (\hat{\theta}_{k-1} + h \cdot V_{g,k})
+\end{equation}
+
+where $\gamma = \frac{\alpha}{h + \alpha}$ $(0 < \gamma < 1)$
+
+The only parameter to be chosen is $\gamma$:
+\begin{itemize}
+\item Large $\alpha$ ($\gamma$ is close to 1) results in a low cut-off frequency and a more significant contribution from the gyroscope.
+\item Small $\alpha$ ($\gamma$ is close to 0) results in high cut-off frequency and a more significant contribution from the accelerometer.
+\end{itemize}
+
+Similar to Kalman filter, write down the complementary filter recursively:
+\[
+\begin{cases}
+\hat{\theta}_{k|k-1} = \hat{\theta}_{k-1} + h \cdot V_{g,k} \\
+\hat{\theta}_{k|k} = (1-\gamma) \theta_{a,k} + \gamma \hat{\theta}_{k|k-1}
+\end{cases}
+\]
+
+\section{Quadrotor Modelling}
+
+(+ configuration)
+
+When the rotorspeed $\omega_i > 0$ the thrust will be an upward vector.
+
+$T_i = b \cdot \omega_i^2$ \quad $i = 1,2,3,4$
+
+The translational dynamics in the world coordinate system is given by:
+
+\[
+m \cdot \dot{v} = \begin{bmatrix} 0 \\ 0 \\ -mg \end{bmatrix} - R_B \begin{bmatrix} 0 \\ 0 \\ T \end{bmatrix} - B \cdot v
+\]
+
+where $T$ is total thrust and $B$ represents aerodynamic friction.
+
+The torque applied to each rotor is opposed by aerodynamic drag:
+
+$Q_i = k \cdot \omega_i^2$
+
+The total torque is:
+\begin{align*}
+\tau_z &= Q_1 - Q_2 + Q_3 - Q_4 = k(\omega_1^2 + \omega_3^2 - \omega_2^2 - \omega_4^2) \\
+\tau_x &= dT_4 - dT_2 = d \cdot b(\omega_4^2 - \omega_2^2) \\
+\tau_y &= dT_1 - dT_3 = d \cdot b(\omega_1^2 - \omega_3^2)
+\end{align*}
+
+The rotational acceleration is governed by Euler's equation:
+
+$J \cdot \dot{\omega} = -\omega \times J\omega + T$
+
+where $T = (\tau_x, \tau_y, \tau_z)^T$ is the torque applied to the aircraft.
+
+%======================================================================
+\lecture{5a}{Equation-based Modelling}{Spring 2024}
+%======================================================================
+
+\section{Modelling of Physical Systems}
+
+Model knowledge is stored in books and human minds which computers cannot access.
+
+``The change of motion is proportional to the motive force impressed'' -- Newton
+
+Newton's second law of motion: $F = m \cdot a$
+
+\begin{warningbox}
+Programming languages usually do not allow equations!
+\end{warningbox}
+
+\section{Languages for Equation-based Modelling of Physical Systems}
+
+Two widely used tools/languages based on the same ideas:
+
+\subsection{Modelica (Standardized Modeling Language)}
+\begin{itemize}
+\item[+] Open standard
+\item[+] Commercial implementations: e.g. Dymola from Dassault Systems, and Wolfram System Modeler from Wolfram
+\item[+] Open-source implementations (OpenModelica/JModelica)
+\item[+] Many existing libraries
+\item[+] A plant model in Modelica can be imported into Simulink
+\item[-] Matlab is often used for the control design
+\end{itemize}
+History: The Modelica design effort was initiated in September 1996 by Hilding Elmqvist from Lund, Sweden.
+
+\subsection{Simscape (Vendor specific language and tool)}
+\begin{itemize}
+\item[+] Easy integration in the Mathworks tool chain (Simulink/Stateflow/Simscape)
+\item[-] Closed implementation
+\end{itemize}
+
+\section{Acausal Modeling}
+
+\begin{definition}
+\textbf{Acausal modeling} allows equations to be written without specifying input-output causality.
+\end{definition}
+
+The acausality makes Modelica library classes \emph{more reusable} than traditional classes containing assignment statements where the input-output causality is fixed.
+
+\begin{example}
+A resistor \emph{equation}:
+\begin{center}
+\texttt{R*i = v;}
+\end{center}
+
+can be used in three ways:
+\begin{itemize}
+\item \texttt{i := v/R;}
+\item \texttt{v := R*i;}
+\item \texttt{R := v/i;}
+\end{itemize}
+\end{example}
+
+\section{Modelica: Typed Declarative Equation-based Textual Language}
+
+A textual \emph{class-based} language where OO is primarily used as a structuring concept.
+
+Behaviour described declaratively using:
+\begin{itemize}
+\item Differential algebraic equations (DAE) (continuous-time)
+\item Event triggers (discrete-time)
+\end{itemize}
+
+\begin{lstlisting}[language=Pascal, caption=Van der Pol oscillator in Modelica]
+class VanDerPol "Van der Pol oscillator model"
+  Real x(start = 1) "Descriptive string for x";
+  Real y(start = 1) "y coordinate";
+  parameter Real lambda = 0.3;
+equation
+  der(x) = y;
+  der(y) = -x + lambda*(1 - x*x)*y;
+end VanDerPol;
+\end{lstlisting}
+
+\section{Faster Development}
+
+Development phases with traditional methods:
+\begin{enumerate}
+\item Systems Definition
+\item System Decomposition
+\item Modeling of Subsystems
+\item Causality Derivation (manual derivation of input/output relations)
+\item Implementation
+\item Simulation
+\end{enumerate}
+
+\begin{keyidea}
+Modelica/Simscape eliminates the manual causality derivation step, significantly reducing development time.
+\end{keyidea}
+
+\section{Multi-Domain Modeling in Modelica}
+
+A DC motor can be thought of as an electrical circuit which also contains an electromechanical component.
+
+\begin{lstlisting}[language=Pascal, caption=DC Motor in Modelica]
+model DCMotor
+  Resistor R(R=100);
+  Inductor L(L=100);
+  VsourceDC DC(f=10);
+  Ground G;
+  ElectroMechanicalElement EM(k=10,J=10, b=2);
+  Inertia load;
+equation
+  connect(DC.p,R.n);
+  connect(R.p,L.n);
+  connect(L.p, EM.n);
+  connect(EM.p, DC.n);
+  connect(DC.n,G.p);
+  connect(EM.flange,load.flange);
+end DCMotor
+\end{lstlisting}
+
+\section{Model Translation Process}
+
+Pipeline:
+\begin{enumerate}
+\item Modelica Model (Graphical/Textual Editor)
+\item Translator $\rightarrow$ Flat model Hybrid DAE
+\item Analyzer $\rightarrow$ Sorted equations
+\item Optimizer $\rightarrow$ Optimized sorted equations
+\item Code generator $\rightarrow$ C Code
+\item C Compiler $\rightarrow$ Executable
+\item Simulation
+\end{enumerate}
+
+\section{Connectors and Connector Classes in Modelica}
+
+Connectors are instances of \emph{connector classes}.
+
+\begin{lstlisting}[language=Pascal, caption=Connector examples]
+connector Pin
+  Voltage v;
+  flow Current i;
+end Pin;
+
+connector Flange
+  Position s;
+  flow Force f;
+end Flange;
+\end{lstlisting}
+
+Keyword \texttt{flow} indicates that currents of connected pins sum to zero.
+
+\section{The Flow Prefix}
+
+Two kinds of variables in connectors:
+\begin{itemize}
+\item \emph{Non-flow variables}: potential or energy level (Simscape: Across)
+\item \emph{Flow variables}: represent some kind of flow (Simscape: Through)
+\end{itemize}
+
+Coupling:
+\begin{itemize}
+\item \emph{Equality coupling}, for non-\texttt{flow} variables
+\item \emph{Sum-to-zero coupling}, for \texttt{flow} variables
+\end{itemize}
+
+\section{Energy Flows in Different Domains}
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+\textbf{Domain Type} & \textbf{Potential} & \textbf{Flow} & \textbf{Carrier} \\
+\midrule
+Electrical & Voltage & Current & Charge \\
+Translational & Position & Force & Linear momentum \\
+Rotational & Angle & Torque & Angular momentum \\
+Magnetic & Magnetic potential & Magnetic flux rate & Magnetic flux \\
+Hydraulic & Pressure & Volume flow & Volume \\
+Heat & Temperature & Heat flow & Heat \\
+Chemical & Chemical potential & Particle flow & Particles \\
+Pneumatic & Pressure & Mass flow & Air \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Connect Equations in Modelica}
+
+\texttt{connect(connector1,connector2)}
+
+Connections between connectors are realized as \emph{equations} in Modelica.
+
+Each primitive connection set of non-flow variables generates equations:
+\[ v_1 = v_2 = v_3 = \cdots = v_n \]
+
+Each primitive connection set of flow variables generates sum-to-zero equations:
+\[ i_1 + i_2 + i_3 + \cdots + i_n = 0 \]
+
+\section{Hybrid Modeling -- Bouncing Ball}
+
+\begin{lstlisting}[language=Pascal, caption=Bouncing ball in Modelica]
+model BouncingBall "the bouncing ball model"
+  parameter Real g=9.81;  // gravitational acc.
+  parameter Real c=0.90;  // elasticity constant
+  Real height(start=10), velocity(start=0);
+equation
+  der(height) = velocity;
+  der(velocity) = -g;
+  when height<0 then
+    reinit(velocity, -c*velocity);
+  end when;
+end BouncingBall;
+\end{lstlisting}
+
+\texttt{reinit} ``assigns'' continuous-time variable \texttt{velocity} a new value.
+
+Initial conditions specified with \texttt{start} attribute.
+
+\section{Conclusions}
+
+\begin{itemize}
+\item Equation-based modelling facilitates modelling of multi-domain systems.
+\item More complex systems benefit more from taking advantage of the better structuring and increased possibility for reusability.
+\item Industry is moving away from modelling everything in Simulink to also use Modelica and/or Simscape.
+\item Trade-off between using an open standardized language and using an integrated tool-chain.
+\end{itemize}
+
+%======================================================================
+\lecture{5b}{Representation of Numbers}{Spring 2024}
+%======================================================================
+
+\section{Hardware Examples}
+
+\subsection{Crazyflie 2.0 System Architecture}
+
+\textbf{Always ON power domain:}
+\begin{itemize}
+\item Push button
+\item RF power amplifier
+\item nRF51822: 16MHz Cortex-M0, 16kB RAM, 256KB Flash, BLE and NRF radio
+\item Power supplies and battery charger
+\item $\mu$USB port
+\end{itemize}
+
+\textbf{Power switched by nRF51 (VCC):}
+\begin{itemize}
+\item 10DOF IMU: 3-axis accelerometer, 3-axis gyro, 3-axis magnetometer, Pressure sensor (I2C)
+\item STM32F405: 168MHz Cortex-M4, 196kB RAM, 1MB Flash (UART, PWM)
+\item Motor driver
+\item Expansion port (SPI/I2C/GPIO/PWM)
+\item EEPROM
+\end{itemize}
+
+\subsection{Processors}
+
+\textbf{Main processor (32 bit, running FreeRTOS):}
+Running control and signal processing algorithms. Interacts with the IMU.
+\begin{itemize}
+\item STM32F405 - Cortex-M4 core (with floating point unit) running at 168 MHz
+\item 196kB of RAM
+\item IMU: 16-bit ADC conversion
+\end{itemize}
+
+\section{Decimal, Binary and Hexadecimal Representation}
+
+\begin{center}
+\begin{tabular}{ccc}
+\toprule
+Binary (base-2) & Decimal (base-10) & Hexadecimal (base-16) \\
+\midrule
+00000 & 0 & 0 \\
+00001 & 1 & 1 \\
+00010 & 2 & 2 \\
+00011 & 3 & 3 \\
+00100 & 4 & 4 \\
+00101 & 5 & 5 \\
+00110 & 6 & 6 \\
+00111 & 7 & 7 \\
+01000 & 8 & 8 \\
+01001 & 9 & 9 \\
+01010 & 10 & A \\
+01011 & 11 & B \\
+01100 & 12 & C \\
+01101 & 13 & D \\
+01110 & 14 & E \\
+01111 & 15 & F \\
+10000 & 16 & 10 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Representation of an Integer in a Computer}
+
+Integers may be unsigned ($\geq 0$) or signed (both positive and negative). 16 or 32 bits are commonly used to represent an integer (depends on the processor).
+
+\begin{example}[Representing 11 in base-2 (4 bits)]
+\begin{center}
+Most significant bit $\leftarrow$ $2^3$ $2^2$ $2^1$ $2^0$ $\rightarrow$ Least significant bit
+
+\begin{tabular}{|c|c|c|c|}
+\hline
+1 & 0 & 1 & 1 \\
+\hline
+\end{tabular}
+\end{center}
+
+$11 = 1 \cdot 2^0 + 1 \cdot 2^1 + 0 \cdot 2^2 + 1 \cdot 2^3$
+\end{example}
+
+\section{Representation of Signed Integers}
+
+\subsection{Na\"ive Representation (bad)}
+
+Introduce a single bit that represents the sign. However, it would then be possible to represent 0 in two different ways $\pm 0$. This would complicate the implementation of arithmetic operations in the hardware.
+
+\subsection{Two's-complement Representation (good)}
+
+Negative numbers are represented by the two's-complement method to the positive number.
+
+\begin{definition}[Two's complement]
+Invert all bits and finally add 1.
+\end{definition}
+
+The value of an N-bit integer $a_{N-1}a_{N-2}\ldots a_0$ is given by:
+\[ w = -a_{N-1} 2^{N-1} + \sum_{i=0}^{N-2} a_i 2^i \]
+
+\begin{keyidea}
+\begin{itemize}
+\item Two's-complement representation with $N$-bits can represent numbers between $-2^{N-1}$ and $2^{N-1} - 1$
+\item When the two's complement method is used, addition and subtraction may be implemented in the same way.
+\end{itemize}
+\end{keyidea}
+
+\section{Representation of Floating-Point Numbers}
+
+Defined in the standard ANSI-IEEE 754.
+
+\begin{center}
+\begin{tabular}{|c|c|c|}
+\hline
+Sign & exponent & fraction \\
+\hline
+\end{tabular}
+\end{center}
+
+\[ V = S \cdot 2^e \cdot m \]
+
+\begin{itemize}
+\item sign bit: determines $S$
+\item $e$ = Exponent - 127
+\item $m$ = 1.fraction in binary \quad (thus $1 \leq m < 2$)
+\end{itemize}
+
+\begin{itemize}
+\item Single precision (32 bits): exponent 8 bits, fraction 23 bits
+\item Double precision (64 bits): exponent 11 bits, fraction 52 bits
+\end{itemize}
+
+\begin{example}[Representation of 0.15625]
+\begin{center}
+\begin{tabular}{|c|c|c|}
+\hline
+0 & 01111100 & 01000000000000000000000 \\
+\hline
+Sign & exponent & fraction ($2^{-2}=0.25$) \\
+\hline
+\end{tabular}
+\end{center}
+
+$S = +1$ (sign bit is 0)
+
+$e = 124 - 127 = -3$
+
+$m = 1.01$ (binary) = 1.25 in decimal
+
+$V = 1 \cdot 2^{-3} \cdot 1.25 = 0.15625$
+\end{example}
+
+\begin{notebox}
+Some numbers, for example, 0.1 (in decimal) does not have an exact representation as a floating-point number.
+\end{notebox}
+
+\section{Special Cases in IEEE 754}
+
+IEEE has reserved exponent field values of all 0s and all 1s.
+
+\textbf{Zero:} All bits in both the exponent and the fraction are set to 0. Note, due to the sign bit we can represent both +0 and -0 (equal).
+
+\textbf{Infinity (INF, $\infty$):} All bits in the exponent are set to 1 and all bits in the fraction are set to 0. Operations with infinite numbers are well defined, for example, $n/\infty = 0$.
+
+\textbf{Not A Number (NaN):} All bits in the exponent are set to 1 and at least one bit in the fraction is set to 1.
+
+\subsection{IEEE Treatment of Special Values}
+\begin{itemize}
+\item $x \times \text{INF} \rightarrow \text{INF}$ for $x > 0$
+\item $x \times \text{-INF} \rightarrow \text{INF}$ for $x < 0$
+\item $\text{INF} - \text{INF} \rightarrow \text{NaN}$
+\item $x / 0 \rightarrow \text{INF}$ for $x > 0$
+\item $0 \times \text{INF} \rightarrow \text{NaN}$
+\item $0 / 0 \rightarrow \text{NaN}$
+\item $\text{INF} / \text{INF} \rightarrow \text{NaN}$
+\item $x \times \text{NaN} \rightarrow \text{NaN}$
+\end{itemize}
+
+%======================================================================
+\lecture{6}{Hybrid Systems}{Spring 2024}
+%======================================================================
+
+\section{Introduction to Hybrid Systems}
+
+\begin{example}[Quadrotor as a Hybrid System]
+The controller is hybrid:
+\begin{itemize}
+\item Modes: Hover, Cruise, Land
+\item Switch between modes based on altitude, battery, operator inputs.
+\end{itemize}
+
+The physics is hybrid:
+\begin{itemize}
+\item Modes: In air, ground contact
+\item Continuous dynamics: position, velocity, orientation.
+\end{itemize}
+\end{example}
+
+\begin{keyidea}
+Real systems have both continuous and discrete dynamics $\Rightarrow$ hybrid systems.
+\end{keyidea}
+
+\section{Formal Model of Hybrid System}
+
+\begin{definition}
+A hybrid system, $H$ is defined as
+\[ H = \langle Q, X, U, f, \text{Init}, E, G, R \rangle \]
+
+where:
+\begin{itemize}
+\item $Q$: A finite set of discrete states (modes)
+\item $X \subseteq \mathbb{R}^n$: Continuous states
+\item $U \subseteq \mathbb{R}^m$: Inputs
+\item $f: Q \times X \times U \rightarrow \mathbb{R}^n$: A vector field (i.e. $\dot{x} = f(q, x, u)$)
+\item Init $\subseteq Q \times X$: A set of initial states
+\item $E \subseteq Q \times Q$: Edges/transitions between states
+\item $G: E \rightarrow 2^X$: A guard condition specifying when a transition can occur
+\item $R: E \times X \rightarrow 2^X$: A reset map defining how the continuous state is updated during a discrete transition
+\end{itemize}
+\end{definition}
+
+\section{Example: Automatic Transmission}
+
+$Q = \{\text{gear1}, \text{gear2}\}$
+
+$X \subseteq \mathbb{R}^2$, $x = (v, r)$ where $v$: speed (km/h), $r$: RPM
+
+$U \subseteq \mathbb{R}$, $u \in [0,1]$ throttle input
+
+$f$:
+\begin{center}
+\begin{tabular}{cc}
+\underline{gear 1} & \underline{gear 2} \\
+$\dot{v} = 4u - 0.1v$ & $\dot{v} = 2u - 0.05v$ \\
+$\dot{r} = 100v - 2r$ & $\dot{r} = 50v - 2r$ \\
+\end{tabular}
+\end{center}
+
+Init $= \{(\text{gear1}, (0, 800))\}$
+
+$E$: $\{\langle\text{gear1}, \text{gear2}\rangle, \langle\text{gear2}, \text{gear1}\rangle\}$
+
+$G$: $G(\langle\text{gear1}, \text{gear2}\rangle) = \{\langle v,r\rangle \mid v \geq 20 \land r \geq 3000\}$ ``Upshift''
+
+\quad $G(\langle\text{gear2}, \text{gear1}\rangle) = \{\langle v,r\rangle \mid v \leq 10 \land r \leq 1500\}$ ``Downshift''
+
+Reset: $R(\langle\text{gear1}, \text{gear2}\rangle, (v,r)) = \{\langle v, 0.5r\rangle\}$
+
+\quad\quad\quad $R(\langle\text{gear2}, \text{gear1}\rangle, (v,r)) = \{\langle v, 2r\rangle\}$
+
+\section{Example: Bouncing Ball}
+
+$Q = \{\text{Air}\}$
+
+$X \subseteq \mathbb{R}^2$, $x = (y, v)$ where $y$: vertical position, $v$: vertical velocity
+
+$U = \emptyset$
+
+$f$: $\dot{y} = v$, $\dot{v} = -g$
+
+Init $= \{(\text{Air}, \langle y_0, v_0\rangle)\}$, $y_0 > 0$
+
+$E = \{\langle\text{Air}, \text{Air}\rangle\}$ \quad self-loop
+
+$G(\langle\text{Air}, \text{Air}\rangle) = \{\langle y,v\rangle \mid y = 0 \land v < 0\}$ \quad (When ball hits floor)
+
+$R(\langle\text{Air}, \text{Air}\rangle, \langle y,v\rangle) = \{(y, -\alpha \cdot v)\}$ \quad $0 < \alpha < 1$
+
+\section{Time Between Bounces and Zeno Behavior}
+
+Consider bounce $i$:
+
+Time to fall from top to floor: $\frac{t_i}{2} = \frac{v_i}{g}$ $(v = a \cdot t)$ $\Rightarrow t_i = \frac{2v_i}{g}$
+
+$v_{i+1} = \alpha \cdot v_i$ $\Rightarrow t_i = \frac{2\alpha^i v_0}{g}$ \quad ($v_0$: velocity for bounce 0)
+
+Total time for $N$-bounces: $T_N = \sum_{i=0}^{N} \frac{2\alpha^i v}{g} = \frac{2v}{g} \sum_{i=0}^{N} \alpha^i$
+
+When $N \rightarrow \infty$: $T_\infty = \frac{2v}{g} \cdot \frac{1}{1-\alpha}$ \quad $\left(\sum_{i=0}^{\infty} \alpha^i = \frac{1}{1-\alpha} \text{ when } |\alpha| < 1\right)$
+
+\begin{warningbox}[title=Zeno Behavior]
+An infinite number of bounces in finite time means the system behavior is undefined beyond time $T_\infty$.
+
+\textbf{Definition:} A Zeno-execution is an infinite execution where the sum of all timed actions is bounded by a constant.
+
+\textbf{Observation:} Zeno behavior is a mathematical artefact that is impossible in reality but might be present in our simulation models if we are not careful when building models.
+
+\textbf{Solution:} Add time for bounce to model.
+\end{warningbox}
+
+\section{Stability of Hybrid Systems}
+
+Consider two linear systems:
+
+$\dot{x} = A_1 x = \begin{bmatrix} -1 & -100 \\ 10 & -1 \end{bmatrix} x$ \quad $\text{eig}(A_1) = -1 \pm \sqrt{1000}j$
+
+$\dot{x} = A_2 x = \begin{bmatrix} -1 & 10 \\ -100 & -1 \end{bmatrix} x$ \quad $\text{eig}(A_2) = \text{eig}(A_1^T) = -1 \pm \sqrt{1000}j$
+
+Both modes are asymptotically stable.
+
+Switching conditions:
+\begin{itemize}
+\item Mode 1 $\rightarrow$ Mode 2: $x_2 = -0.2x_1$
+\item Mode 2 $\rightarrow$ Mode 1: $x_2 = 5x_1$
+\end{itemize}
+
+\begin{keyidea}
+Result:
+\begin{itemize}
+\item[i)] By switching between stable modes the hybrid system may become unstable
+\item[ii)] By switching between unstable modes the hybrid system may become stable
+\end{itemize}
+
+The Lyapunov method may be used to prove stability.
+\end{keyidea}
+
+%======================================================================
+\lecture{7}{Simulation of Hybrid Systems}{Spring 2024}
+%======================================================================
+
+\section{Numerical Simulation of ODEs}
+
+\textbf{Initial value problem (IVP):} $\dot{x} = f(x)$, $x(0) = x_0$
+
+\begin{definition}
+A signal $x : [0,T] \to \mathbb{R}^n$ is a \textbf{solution} to the IVP if
+\[ x(t) = x_0 + \int_0^t f(x(\tau)) d\tau \quad \forall t \in [0, T] \]
+\end{definition}
+
+\subsection{Euler Method (First Order)}
+
+\begin{enumerate}
+\item Partition interval into $N$ subintervals of length $h := T/N$
+\[ [kh, (k+1)h] \quad k \in \{0, 1, \ldots, N-1\} \]
+\item Assume derivative of $x$ constant on each subinterval
+\[ x((k+1)h) = x(kh) + \int_{kh}^{(k+1)h} f(x(\tau)) d\tau \approx x(kh) + h \cdot f(x(kh)) \]
+\end{enumerate}
+
+On each subinterval $x$ is assumed linear.
+
+\subsection{Runge-Kutta Methods ($m$-order)}
+
+\begin{enumerate}
+\item Partition interval into $N$ subintervals of length $h := T/N$
+\item Approximate:
+\[ x((k+1)h) \approx x(kh) + h \sum_{i=1}^{m} \alpha_i f(x(kh) + \delta_i) \]
+\end{enumerate}
+
+\subsection{Variable-Step Methods}
+
+Pick tolerance $\varepsilon$ and define $t_0 := 0$
+\[ x(t_{k+1}) = x(t_k) + \int_{t_k}^{t_{k+1}} f(x(\tau)) d\tau \approx x(t_k) + (t_{k+1} - t_k) f(x(t_k)) \]
+
+Choose $t_{k+1}$ sufficiently close to $t_k$ so that
+\[ \|f(x(t_k)) - f(x(t_{k+1}))\| \leq \varepsilon \]
+
+\begin{keyidea}
+Simulation can be both \emph{fast} and \emph{accurate}:
+\begin{enumerate}
+\item When $f$ is ``flat'' one can advance time fast
+\item When $f$ is ``steep'' one advances time slowly (to retain accuracy)
+\end{enumerate}
+\end{keyidea}
+
+\section{Zero-Crossing Detection}
+
+\begin{warningbox}
+Linear/polynomial approximations are bad when transitions occur. Before the transition the linear approximation seems very good so the integration algorithm is fooled into choosing a large integration step.
+\end{warningbox}
+
+\begin{keyidea}
+After a transition is detected, the integration algorithm ``goes back in time'' to determine where the transition occurred and starts a new integration step at that point.
+\end{keyidea}
+
+Simulink: Simulation $\to$ Model Configuration Parameters $\to$ Zero-crossing options
+
+Algorithm ``Adaptive'' is the most recent and powerful.
+
+\section{ODEs with Resets (Impulse Systems)}
+
+\begin{tabular}{ll}
+$Q$ & set of discrete states \\
+$\mathbb{R}^n$ & continuous state-space \\
+$f : \mathbb{R}^n \to \mathbb{R}^n$ & vector field \\
+$\varphi \subseteq \mathbb{R}^n$ & transition set \\
+$\rho : \mathbb{R}^n \to \mathbb{R}^n$ & reset map \\
+\end{tabular}
+
+General form:
+\begin{itemize}
+\item Continuous dynamics: $\dot{x} = f(x)$
+\item Guard: $x^- \in \varphi$?
+\item Reset: $x := \rho(q_1, x^-)$
+\end{itemize}
+
+\begin{example}[Bouncing ball]
+\begin{itemize}
+\item Dynamics: $\dot{x}_1 = x_2$, $\dot{x}_2 = -g$
+\item Guard: $x_1 \leq 0 \land x_2 < 0$?
+\item Reset: $x_2 := -c \cdot x_2^-$
+\end{itemize}
+\end{example}
+
+\section{Stateflow for Hybrid Systems}
+
+Stateflow chart for bouncing ball:
+\begin{itemize}
+\item Initial conditions: $p = 10$; $v = 15$;
+\item State ``Falling'' with continuous dynamics:
+\begin{itemize}
+\item p\_dot = v;
+\item v\_dot = -9.81;
+\end{itemize}
+\item Transition guard: $[p \leq 0 \land\land v < 0]$
+\item Transition action: $p = 0$; $v = -0.8 \cdot v$;
+\end{itemize}
+
+%======================================================================
+\lecture{8}{Real-Time Systems}{Spring 2024}
+%======================================================================
+
+\section{Real-Time Control Systems}
+
+\begin{itemize}
+\item Inputs are \emph{excitations} and outputs are corresponding \emph{responses}
+\item Inputs and outputs may be digital or analog
+\item Inputs are associated with sensors, cameras, etc.
+\item Outputs with actuators, displays, etc.
+\end{itemize}
+
+\section{Response Time}
+
+\begin{definition}
+The time between the presentation of a set of inputs to a system and the realization of the required behavior, including the availability of all associated outputs, is called the \textbf{response time} of the system.
+\end{definition}
+
+\begin{definition}[Real-Time System]
+A real-time system is a computer system that must satisfy bounded response-time constraints or risk severe consequences, including failure.
+
+A real-time system is one whose logical correctness is based on both the correctness of the outputs and their timeliness.
+\end{definition}
+
+\section{Soft, Hard and Firm Real-Time}
+
+\begin{definition}[Soft Real-Time System]
+A \textbf{soft real-time system} is one in which performance is degraded but not destroyed by failure to meet response-time constraints.
+\end{definition}
+
+\begin{definition}[Hard Real-Time System]
+A \textbf{hard real-time system} is one in which failure to meet even a single deadline may lead to complete or catastrophic system failure.
+\end{definition}
+
+\begin{definition}[Firm Real-Time System]
+A \textbf{firm real-time system} is one in which a few missed deadlines will not lead to total failure, but missing more than a few may lead to complete or catastrophic system failure.
+\end{definition}
+
+\begin{notebox}
+Control systems are typically ``Firm Real-Time Systems''.
+\end{notebox}
+
+\section{Real-Time Punctuality}
+
+Real-time punctuality means that every response time has an average value, $t_R$, with upper and lower bounds of $t_R + \varepsilon_U$ and $t_R - \varepsilon_L$, respectively, and $\varepsilon_U, \varepsilon_L \to 0^+$.
+
+\begin{itemize}
+\item In all practical systems, the values of $\varepsilon_U$ and $\varepsilon_L$ are nonzero, though they may be very small
+\item The nonzero values are due to cumulative latency and propagation-delay components (hardware/software)
+\item Such response times contain jitter within the interval $t \in [-\varepsilon_L, +\varepsilon_U]$
+\end{itemize}
+
+\section{Events}
+
+\begin{definition}[Event]
+Any occurrence that causes the program counter to change non-sequentially is considered a change of flow-of-control, and thus an event.
+\end{definition}
+
+\begin{definition}[Release Time]
+The release time is the time at which an instance of a scheduled task is ready to run, and is generally associated with an interrupt.
+\end{definition}
+
+\subsection{Taxonomy of Events}
+
+\begin{itemize}
+\item An event can be either synchronous or asynchronous
+\begin{itemize}
+\item \emph{Synchronous} events occur at predictable times in the flow-of-control
+\item \emph{Asynchronous} events occur at unpredictable points in the flow-of-control and are usually caused by external sources
+\end{itemize}
+\item Events can be periodic, aperiodic or sporadic
+\begin{itemize}
+\item A real-time clock that pulses regularly is a \emph{periodic} event
+\item Events that do not occur at regular periods are called \emph{aperiodic}
+\item Aperiodic events that tend to occur very infrequently are called \emph{sporadic}
+\end{itemize}
+\end{itemize}
+
+\section{Operating Systems}
+
+\begin{itemize}
+\item Provides environment for executing programs
+\item Process abstraction for multitasking/concurrency (Scheduling)
+\item Interfacing hardware (device drivers)
+\item File systems
+\item Communication (TCP/IP)
+\item In embedded control systems the main task of the operating system is to schedule concurrent tasks and make sure that the tasks meet their deadlines.
+\end{itemize}
+
+\section{Real-Time Operating Systems (RTOS)}
+
+\begin{itemize}
+\item Execution of multiple tasks on a single processor (control, logging, communication, gui, etc.)
+\item Hard/Firm Real-time Constraints
+\item Deterministic and predictable behavior
+\item Worst-case response time rather than average response time of interest
+\item Often distributed
+\item Safety critical
+\item Operating over long time periods
+\item Examples: FreeRTOS, VxWorks, QNX, RTLinux, Windows Embedded
+\end{itemize}
+
+\section{Processes and Threads (Tasks)}
+
+Processes are not sharing any memory, but threads share memory.
+
+Each thread has:
+\begin{itemize}
+\item Stack
+\item Registers
+\item PC (Program Counter)
+\end{itemize}
+
+Threads within the same process share the same memory space.
+
+\section{States of a Process/Task}
+
+\begin{center}
+\textbf{ready} $\xrightarrow{\text{scheduler dispatch}}$ \textbf{running}
+
+\textbf{running} $\xrightarrow{\text{scheduler preempt or process yield}}$ \textbf{ready}
+
+\textbf{running} $\xrightarrow{\text{I/O or wait}}$ \textbf{blocked}
+
+\textbf{blocked} $\xrightarrow{\text{I/O or event completion}}$ \textbf{ready}
+\end{center}
+
+\section{Context Switch}
+
+\begin{itemize}
+\item When the CPU has to execute a new task and the old one has not finished, the system must:
+\begin{itemize}
+\item save the state of the old task (registers, including program counter, stack pointer)
+\item then load the saved state for the new task.
+\end{itemize}
+\item This is called a \underline{context switch}.
+\item Context switch time is overhead and no useful work is done while the switch takes place.
+\item Context switching time depends upon hardware support.
+\end{itemize}
+
+\section{Scheduler}
+
+\begin{definition}
+The \textbf{scheduler} is the part of the kernel responsible for deciding which task should be executing at any particular time. The kernel can suspend and later resume a process many times during the process lifetime.
+\end{definition}
+
+\begin{definition}
+The \textbf{scheduling policy} is the algorithm used by the scheduler to decide which task to execute at any point in time.
+\end{definition}
+
+Scheduling decisions may take place when a task:
+\begin{enumerate}
+\item switches from running to blocked state
+\item switches from running to ready state
+\item switches from blocked to ready state
+\item terminates
+\end{enumerate}
+
+%======================================================================
+\lecture{9}{Tasks in FreeRTOS}{Spring 2024}
+%======================================================================
+
+\section{Task Function}
+
+\begin{lstlisting}[language=C, caption=FreeRTOS Task Function Template]
+void ATaskFunction( void *pvParameters )
+{
+    /* Variables can be declared just as per a normal
+       function. Each instance of a task created using
+       this function will have its own copy of the
+       iVariableExample variable. This would not be true
+       if the variable was declared static. */
+    int iVariableExample = 0;
+
+    /* A task will normally be implemented as an
+       infinite loop. */
+    for( ;; )
+    {
+        /* The code to implement the task
+           functionality will go here. */
+    }
+
+    /* Should the task implementation ever break out
+       of the above loop then the task must be deleted.
+       The NULL parameter passed to the vTaskDelete()
+       function indicates that the task to be deleted
+       is the calling (this) task. */
+    vTaskDelete( NULL );
+}
+\end{lstlisting}
+
+\section{Task States}
+
+States:
+\begin{itemize}
+\item \textbf{Running} -- Currently executing
+\item \textbf{Ready} -- Ready to run if selected
+\item \textbf{Blocked} -- Waiting for an event
+\item \textbf{Suspended} -- Enters/exits only through API functions
+\end{itemize}
+
+Transitions:
+\begin{itemize}
+\item Running $\to$ Ready: scheduler preempt or process yield
+\item Ready $\to$ Running: scheduler dispatch
+\item Running $\to$ Blocked: Blocking API function called
+\item Blocked $\to$ Ready: Event occurs
+\item Any state $\to$ Suspended: vTaskSuspend() called
+\item Suspended $\to$ Ready: vTaskResume() called
+\end{itemize}
+
+\section{Creating a Task}
+
+\begin{lstlisting}[language=C, caption=xTaskCreate API]
+portBASE_TYPE xTaskCreate( pdTASK_CODE pvTaskCode,
+                const signed char * const pcName,
+                unsigned short usStackDepth,
+                void *pvParameters,
+                unsigned portBASE_TYPE uxPriority,
+                xTaskHandle *pxCreatedTask
+              );
+\end{lstlisting}
+
+\begin{itemize}
+\item pvTaskCode -- A pointer to the task function
+\item pcName -- Descriptive task name used during profiling
+\item usStackDepth -- Stack depth/size
+\item pvParameters -- Pointer to task parameters
+\item uxPriority -- Task priority (low priority numbers denote low priority tasks; the idle task has priority zero)
+\item pxCreatedTask -- Returns a task ``handle''
+\end{itemize}
+
+\section{Task Starvation}
+
+\begin{warningbox}
+If a higher priority task is always ready, lower priority tasks will be ``starved'' because the higher priority task is always selected by the scheduler.
+
+Need a way for tasks to ``wait'', but not run...
+\end{warningbox}
+
+\section{Blocked State}
+
+When ``Not Running,'' a task may be in one of three sub-states:
+\begin{itemize}
+\item \textbf{``Ready''} -- The task is ready to run if selected
+\item \textbf{``Blocked''} -- The task is waiting for an \textbf{event}
+\item \textbf{``Suspended''} -- The task enters and exits this state \textbf{only} through API functions (rarely used)
+\end{itemize}
+
+Tasks can enter the ``Blocked'' state to wait for two types of events:
+\begin{itemize}
+\item \textbf{Temporal Events}, e.g., delaying for a fixed amount or until an absolute time
+\item \textbf{Synchronization Events}, e.g., waiting for data
+\end{itemize}
+
+\section{FreeRTOS Ticks}
+
+The FreeRTOS real time kernel measures time using a \textbf{tick} count variable. A timer interrupt (the RTOS \textbf{tick interrupt}) increments the tick count with strict temporal accuracy.
+
+Each time the tick count is incremented the real time kernel must check to see if it is now time to unblock or wake a task.
+
+The frequency at which a timer generates the tick interrupt can be set in FreeRTOS configuration file, common value is 100 Hz (10 ms period).
+
+\section{Task Delay Functions}
+
+\subsection{vTaskDelay}
+
+\begin{lstlisting}[language=C]
+void vTaskDelay( portTickType xTicksToDelay );
+\end{lstlisting}
+
+The task remains in the Blocked state for the specified number of tick interrupts.
+
+The constant portTICK\_RATE\_MS can be used to convert milliseconds into ticks.
+
+\subsection{vTaskDelayUntil}
+
+\begin{lstlisting}[language=C, caption=Periodic task using vTaskDelayUntil]
+void vPeriodicTask( void *pvParameters )
+{
+    portTickType xLastWakeTime;
+    xLastWakeTime = xTaskGetTickCount();
+
+    for( ;; )
+    {
+        vPrintString( "Periodic task is running.\n" );
+
+        /* The task should execute every 10 ms exactly */
+        vTaskDelayUntil( &xLastWakeTime,
+                         ( 10 / portTICK_RATE_MS ) );
+    }
+}
+\end{lstlisting}
+
+\begin{keyidea}
+vTaskDelayUntil() is better for accurate scheduling of periodic tasks. Otherwise, the period will be the delay time plus the execution time of the code in the loop.
+\end{keyidea}
+
+\section{The Idle Task}
+
+\begin{itemize}
+\item Created when the scheduler starts
+\item Ensures ``something'' can always run
+\item Runs at the lowest priority (0)
+\end{itemize}
+
+%======================================================================
+\lecture{10}{Semaphores and Synchronization}{Spring 2024}
+%======================================================================
+
+\section{Shared Memory Programs}
+
+\begin{example}[Race Condition]
+\texttt{int x = 0} (shared variable)
+
+\begin{center}
+\begin{tabular}{cc}
+\textbf{Task T1} & \textbf{Task T2} \\
+\texttt{y1 = 0} & \texttt{y2 = 0} \\
+\texttt{R1: y1 = x} & \texttt{R2: y2 = x} \\
+\texttt{W1: x = y1 + 1} & \texttt{W2: x = y2 + 1} \\
+\end{tabular}
+\end{center}
+
+What are the possible values of x after all steps are executed?
+
+x can be 1 or 2
+
+Possible executions:
+\begin{itemize}
+\item R1, W1, R2, W2 $\to$ 2
+\item R1, R2, W1, W2 $\to$ 1
+\item R1, R2, W2, W1 $\to$ 1
+\end{itemize}
+\end{example}
+
+\begin{definition}[Data Race]
+Concurrent accesses to shared object (variables) where the result depends on order of execution. Should be avoided!
+\end{definition}
+
+\section{Mutual Exclusion Problem}
+
+\begin{itemize}
+\item \textbf{Critical Section}: Part of code that asynchronous tasks should execute without interference from others
+\item \textbf{Mutual Exclusion Problem}: Design code to be executed before entering the critical section of each task
+\end{itemize}
+
+Requirements:
+\begin{itemize}
+\item Safety Requirement: Both tasks should not be in critical section simultaneously
+\item Absence of deadlocks: If a task is trying to enter a critical section, then the task should be able to enter eventually
+\end{itemize}
+
+\section{Test\&Set Register}
+
+\begin{itemize}
+\item Hardware support for atomic read and write to a special Test\&Set register
+\item The Test\&Set register holds a Boolean value and has two operations:
+\begin{itemize}
+\item Test\&Set operation: Changes the value to 1 and returns the old value
+\item Reset operation: Changes the value to 0
+\item If two processes are competing to execute Test\&Set on a register with value 0, one will get back 0 and other will get back 1
+\end{itemize}
+\item Used to efficiently implement synchronization primitives like Semaphores
+\end{itemize}
+
+\section{Semaphores}
+
+\begin{definition}
+A semaphore is like an integer, with three differences:
+\begin{enumerate}
+\item When you create the semaphore, you can initialize its value to any integer, but after that the only operations you are allowed to perform are \textbf{increment} (increase by one) and \textbf{decrement} (decrease by one). You cannot read the current value of the semaphore.
+
+\item When a task decrements the semaphore, if the result is negative, the task blocks itself and cannot continue until another task increments the semaphore.\\
+FreeRTOS: \texttt{xSemaphoreTake}
+
+\item When a task increments the semaphore, if there are other tasks waiting, one of the waiting tasks gets unblocked.\\
+FreeRTOS: \texttt{xSemaphoreGive}
+\end{enumerate}
+\end{definition}
+
+\section{Why Semaphores?}
+
+\begin{enumerate}
+\item Can implement many synchronization patterns for concurrent tasks.
+\item Semaphores impose deliberate constraints that help programmers avoid errors.
+\item Solutions using semaphores are often clean and organized, making it easy to demonstrate their correctness.
+\item Semaphores can be implemented efficiently on many systems, so solutions that use semaphores are portable and usually efficient.
+\end{enumerate}
+
+\section{Signaling with Semaphores}
+
+Create semaphore \textbf{sem} with \emph{initial value} \textbf{0}
+
+\begin{center}
+\begin{tabular}{cc}
+\textbf{Task A} & \textbf{Task B} \\
+\texttt{doWorkA();} & \texttt{take(sem);} \\
+\texttt{give(sem);} & \texttt{doWorkB();} \\
+\end{tabular}
+\end{center}
+
+This guarantees that doWorkA is executed before doWorkB.
+
+\section{Rendezvous Synchronization}
+
+\textbf{Problem:} Task A has to wait for Task B and vice versa.
+
+\textbf{Solution:} Create two semaphores \textbf{aArrived} and \textbf{bArrived} both with initial value 0
+
+\begin{center}
+\begin{tabular}{cc}
+\textbf{Task A} & \textbf{Task B} \\
+\texttt{doWorkA1();} & \texttt{doWorkB1();} \\
+\texttt{give(aArrived);} & \texttt{give(bArrived);} \\
+\texttt{take(bArrived);} & \texttt{take(aArrived);} \\
+\texttt{doWorkA2();} & \texttt{doWorkB2();} \\
+\end{tabular}
+\end{center}
+
+\begin{warningbox}[title=Incorrect Solution (Deadlock)]
+If both tasks do \texttt{take} before \texttt{give}, they will deadlock!
+\end{warningbox}
+
+\section{Mutual Exclusion Synchronization}
+
+Create semaphore \textbf{mutex} with \emph{initial value} \textbf{1}
+
+\begin{center}
+\begin{tabular}{cc}
+\textbf{Task A} & \textbf{Task B} \\
+\texttt{doWorkA1();} & \texttt{doWorkB1();} \\
+\texttt{take(mutex);} & \texttt{take(mutex);} \\
+\texttt{doCriticalWork();} & \texttt{doCriticalWork();} \\
+\texttt{give(mutex);} & \texttt{give(mutex);} \\
+\texttt{doWorkA2();} & \texttt{doWorkB2();} \\
+\end{tabular}
+\end{center}
+
+\section{Deadlock Conditions}
+
+A deadlock situation can arise if and only if \textbf{all of} the following conditions hold simultaneously:
+
+\begin{itemize}
+\item \textbf{Mutual exclusion}: The resources involved must be unshareable.
+
+\item \textbf{Hold and wait}: A task is currently holding at least one resource and requesting additional resources which are being held by other tasks.
+
+\item \textbf{No preemption}: A resource can be released only voluntarily by the task holding it.
+
+\item \textbf{Circular wait}: Each task must be waiting for a resource which is being held by another task, which in turn is waiting for the first task to release the resource.
+\end{itemize}
+
+\section{Deadlock Avoidance}
+
+\begin{keyidea}
+Introduce a global ordering among all the resources, e.g., $R_1 < R_2 < \ldots < R_M$
+
+Deadlocks are avoided if the resources are always allocated in the order defined by the global ordering. Circular wait is no longer possible.
+
+Drawback: Resources are allocated before they are needed (conservative solution).
+\end{keyidea}
+
+\section{Priority Inversion}
+
+\begin{warningbox}
+A low priority task holds a lock on a shared object. It gets preempted by a high priority task, which then tries to acquire the lock and blocks.
+
+A medium priority task preempts the low priority task, keeping the higher priority task blocked for an unbounded amount of time.
+
+In effect, the priorities of tasks get inverted!
+\end{warningbox}
+
+\begin{example}[Mars Rover Pathfinder]
+The Mars Rover Pathfinder landed on Mars on July 4th, 1997. A few days into the mission, the Pathfinder began sporadically missing deadlines, causing total system resets, each with loss of data. The problem was diagnosed on the ground as priority inversion.
+\end{example}
+
+\section{Priority Inheritance Protocol}
+
+When a high priority task blocks on a resource held by a low priority task, the low priority task inherits the priority of the high priority task, preventing preemption by medium priority tasks.
+
+\begin{notebox}
+In FreeRTOS, a mutex uses priority inheritance but binary semaphores do not.
+\end{notebox}
+
+%======================================================================
+\lecture{11}{Scheduling}{Spring 2024}
+%======================================================================
+
+\section{Interacting with Hardware}
+
+\subsection{Polling}
+\begin{itemize}
+\item Main loop checks each I/O device periodically.
+\item If input is ready, processor initiates communication.
+\end{itemize}
+
+\subsection{Interrupts}
+\begin{itemize}
+\item External hardware alerts the processor that input is ready.
+\item Processor suspends what it is doing.
+\item Processor invokes an interrupt service routine (ISR).
+\item ISR interacts with the application concurrently.
+\end{itemize}
+
+\section{Interrupt Management}
+
+\begin{enumerate}
+\item When interrupts are used, how much processing should be performed inside the ISR, and how much outside?
+
+It is normally desirable to keep each ISR as short as possible.
+
+\item How can events be communicated to the main (non-ISR) code?
+
+Semaphores can be used to synchronize ISR and main tasks. Special versions:
+\begin{itemize}
+\item \texttt{xSemaphoreGiveFromISR}
+\item \texttt{xSemaphoreTakeFromISR}
+\end{itemize}
+\end{enumerate}
+
+\section{Cyclic Executives}
+
+One common way of implementing hard real-time systems is to use a cyclic executive.
+
+The design is concurrent but the code is produced as a collection of procedures.
+
+Procedures are mapped onto a set of \textbf{minor} cycles that constitute the complete schedule (or \textbf{major} cycle).
+
+\begin{keyidea}
+Has the advantage of being fully deterministic.
+\end{keyidea}
+
+\begin{example}[Task Set]
+\begin{center}
+\begin{tabular}{ccc}
+\toprule
+Task & Period (ms), T & WCET \\
+\midrule
+a & 25 & 10 \\
+b & 25 & 8 \\
+c & 50 & 5 \\
+d & 50 & 4 \\
+e & 100 & 2 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Minor cycle: 25ms, Major cycle: 100 ms
+\end{example}
+
+\subsection{Problems with Cyclic Executives}
+
+\begin{itemize}
+\item Sporadic activities are difficult (impossible!) to incorporate
+\item The cyclic executive is difficult to construct and maintain --- it is a NP-hard problem
+\item Any task with a sizable computation time will need to be split into a fixed number of fixed sized procedures
+\item More flexible scheduling methods are difficult to support
+\end{itemize}
+
+\section{Standard Notation}
+
+\begin{tabular}{cl}
+\toprule
+Symbol & Description \\
+\midrule
+B & Worst-case blocking time for the process \\
+\textbf{C} & \textbf{Worst-case computation time (WCET)} \\
+\textbf{D} & \textbf{Deadline of the tasks} \\
+I & The interference time of the task \\
+J & Release jitter of the tasks \\
+\textbf{N} & \textbf{Number of tasks in the system} \\
+\textbf{P} & \textbf{Priority assigned to the task} \\
+\textbf{R} & \textbf{Worst-case response time of the task} \\
+T & Minimum time between task releases (period) \\
+\textbf{U} & \textbf{The utilization of each task (= C/T)} \\
+\bottomrule
+\end{tabular}
+
+\section{Fixed-Priority Scheduling (FPS)}
+
+Each process has a fixed, static priority which is computed pre-run-time.
+
+The runnable tasks are executed in the order determined by their priority.
+
+\begin{notebox}
+In real-time systems, the ``priority'' of a task is derived from its temporal requirements, not its importance to the correct functioning of the system or its integrity.
+\end{notebox}
+
+\section{Earliest Deadline First (EDF)}
+
+The runnable tasks are executed in the order determined by the absolute deadlines of the tasks.
+
+Whenever a scheduling event occurs (task finishes, new task released, etc.) task with the shortest (nearest) deadline is selected for execution.
+
+The scheme is described as dynamic because absolute deadlines are computed at run time.
+
+\section{Rate Monotonic Scheduling (RMS)}
+
+\begin{theorem}
+If any priority assignment yields a feasible schedule, then priorities ordered by period (smallest period has the highest priority) also yields a feasible schedule.
+
+RMS is optimal in the sense of feasibility.
+\end{theorem}
+
+Assumptions:
+\begin{itemize}
+\item Periodic tasks with periods $T_1, \ldots, T_N$
+\item Worst-case execution times $C_1, \ldots, C_N$
+\item No mutexes, semaphores, or blocking I/O
+\item No precedence constraints
+\item Fixed priorities
+\item Preemptive scheduling
+\end{itemize}
+
+\section{Utilization-Based Analysis (Liu-Layland)}
+
+For D=T task sets only, a simple sufficient (but not necessary) schedulability test exists:
+
+\begin{equation}
+U \equiv \sum_{i=1}^{N} \frac{C_i}{T_i} \leq N(2^{1/N} - 1)
+\end{equation}
+
+$U \to 0.69$ as $N \to \infty$
+
+\begin{center}
+\begin{tabular}{cc}
+\toprule
+N & Utilization bound \\
+\midrule
+1 & 100.0\% \\
+2 & 82.8\% \\
+3 & 78.0\% \\
+4 & 75.7\% \\
+5 & 74.3\% \\
+10 & 71.8\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Response-Time Analysis}
+
+Response-time analysis calculates the worst-case response time for a set of tasks executing periodically.
+
+Task $i$'s worst-case response time, $R$, is calculated and checked with its deadline:
+\[
+R_i \leq D_i
+\]
+\[
+R_i = C_i + I_i
+\]
+
+Where $I$ is the interference from higher priority tasks.
+
+\subsection{Calculating R}
+
+During $R$, each higher priority task $j$ will execute a number of times:
+\[
+\text{Number of Releases} = \left\lceil \frac{R_i}{T_j} \right\rceil
+\]
+
+Total interference:
+\[
+\left\lceil \frac{R_i}{T_j} \right\rceil C_j
+\]
+
+\subsection{Response Time Equation}
+
+\begin{equation}
+R_i = C_i + \sum_{j \in hp(i)} \left\lceil \frac{R_i}{T_j} \right\rceil C_j
+\end{equation}
+
+Where $hp(i)$ is the set of tasks with priority higher than task $i$.
+
+Solve by forming a recurrence relationship:
+\begin{equation}
+w_i^{n+1} = C_i + \sum_{j \in hp(i)} \left\lceil \frac{w_i^n}{T_j} \right\rceil C_j
+\end{equation}
+
+When $w_i^n = w_i^{n+1}$ the solution has been found.
+
+\begin{example}[Response Time Calculation]
+\begin{center}
+\begin{tabular}{ccc}
+\toprule
+Task & Period T & WCET \\
+\midrule
+a & 7 & 3 \\
+b & 12 & 3 \\
+c & 20 & 5 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+$R_a = 3$
+
+$w_b^0 = 3$, $w_b^1 = 3 + \lceil 3/7 \rceil \cdot 3 = 6$, $w_b^2 = 6$ $\Rightarrow R_b = 6$
+
+$w_c^0 = 5$, $w_c^1 = 11$, $w_c^2 = 14$, $w_c^3 = 17$, $w_c^4 = 20$, $w_c^5 = 20$ $\Rightarrow R_c = 20$
+\end{example}
+
+\begin{keyidea}
+Response-Time Analysis is \textbf{sufficient and necessary}.
+
+If the task set passes the test, they will meet all their deadlines; if they fail the test then, at run-time, a task will miss its deadline.
+\end{keyidea}
+
+\section{Task Sets with D $<$ T}
+
+For D = T, Rate Monotonic priority ordering is optimal.
+
+For D $<$ T, Deadline Monotonic priority ordering is optimal:
+\[
+D_i < D_j \Rightarrow P_i > P_j
+\]
+
+\section{Utilization-based Test for EDF}
+
+For periodic tasks with deadline equal to the period:
+
+\begin{equation}
+\sum_{i=1}^{N} \frac{C_i}{T_i} \leq 1
+\end{equation}
+
+\begin{keyidea}
+A much simpler test than RMS! EDF can support higher utilizations.
+
+However, FPS is easier to implement as priorities are static. EDF requires a more complex run-time system with higher overhead.
+
+During overload situations:
+\begin{itemize}
+\item FPS is more predictable; low priority tasks miss their deadlines first.
+\item EDF is unpredictable; a domino effect can occur where many tasks miss deadlines.
+\end{itemize}
+\end{keyidea}
+
+%======================================================================
+\lecture{12}{Control Task Timing}{Spring 2024}
+%======================================================================
+
+\section{Control System Development Today}
+
+\begin{center}
+\begin{tabular}{cc}
+\textbf{Control Department} & \textbf{Software Department} \\
+Requirements & Software Design \\
+Algorithm Design & Unit tests \\
+(Plant model, Controller models) & Functional tests \\
+\end{tabular}
+\end{center}
+
+\section{Potential Problems}
+
+Control engineers typically are not very well aware of hardware/software platform that are used to implement controllers:
+\begin{itemize}
+\item Computer performance is limited, adds latency
+\item Multiple control tasks are executing concurrently, adds latency and jitter
+\end{itemize}
+
+Software engineers do not, in general, understand controller timing very well:
+\begin{itemize}
+\item The timing model often assumed is not well suited for control applications
+\end{itemize}
+
+Control theory and real-time scheduling have evolved as separate scientific disciplines.
+
+\section{Common Assumptions about Control Tasks}
+
+A simple task model often used in schedulability analysis is described by:
+\begin{itemize}
+\item A fixed period $T_i$
+\item A fixed known WCET
+\item A hard relative deadline with $D_i = T_i$
+\end{itemize}
+
+Is this suitable for control tasks?
+
+\subsection{Fixed Period?}
+
+Not necessarily:
+\begin{itemize}
+\item Controllers may switch between different modes with different sampling intervals.
+\item Controller tasks could be triggered by state of the system (e.g., engine control by angle) or sporadically arriving measurements.
+\item Sampling period could be adjusted on-line by a high-level scheduler.
+\end{itemize}
+
+\subsection{Fixed and Known WCET?}
+
+Not always. WCET is hard to calculate analytically since:
+\begin{itemize}
+\item All paths through the programs need to be analyzed.
+\item The processor does caching and instruction reordering.
+\item Different modes in the controller may have different WCET.
+\end{itemize}
+
+Model-predictive controllers (MPC):
+\begin{itemize}
+\item Optimization in each sample
+\item Number of iterations may vary
+\item Potential problems with convergence
+\end{itemize}
+
+\subsection{Hard Deadlines?}
+
+Most often we do not have hard deadlines. Controller deadlines are often \emph{firm} rather than hard (OK to miss a few, but not too many in a row).
+
+What happens when a task does not meet a deadline?
+\begin{itemize}
+\item Abort task? No updated control signal $\to$ major problems.
+\item Allow the task to complete late? Often the preferred choice.
+\end{itemize}
+
+\section{Control Task Timing}
+
+Periodic task timing (each calculation of a control output is a new job):
+\begin{itemize}
+\item $r_{i,k} = kT_i$ -- release time of job $k$ of task $i$
+\item $s_{i,k}$ -- start time of job $k$ of task $i$
+\item $f_{i,k}$ -- finish time of job $k$ of task $i$
+\item $R_{i,k}$ -- response time of job $k$ of task $i$
+\item $R_i = \max_k R_{i,k}$ -- worst-case response time of task $i$
+\end{itemize}
+
+\section{Latency and Jitter in Control Tasks}
+
+Assume inputs are read at start time and written at finish time:
+
+\begin{itemize}
+\item $L^s_{i,k}$ -- sampling latency of job $k$ of task $i$
+\item $L^{io}_{i,k}$ -- input-output latency of job $k$ of task $i$
+\item $J^s_i = \max_k L^s_{i,k} - \min_k L^s_{i,k}$ -- sampling jitter of task $i$
+\item $J^{io}_i = \max_k L^{io}_{i,k} - \min_k L^{io}_{i,k}$ -- input-output jitter of task $i$
+\end{itemize}
+
+\section{Scheduling Design to Reduce Delay and Jitter}
+
+A control algorithm normally consists of two parts:
+
+\begin{lstlisting}[language=C]
+while (1) {
+  read_input();
+  calculate_output();
+  write_output();
+  update_state();
+  ...
+}
+\end{lstlisting}
+
+\begin{keyidea}
+Schedule the two parts as separate tasks:
+\begin{itemize}
+\item input, calculate, output -- high priority
+\item update -- low priority
+\end{itemize}
+\end{keyidea}
+
+\section{Subtask Scheduling Analysis}
+
+\begin{itemize}
+\item Calculate Output ($\tau_{CO}$) should have as short deadline as possible
+\item Update State ($\tau_{US}$) can have deadline $D_{US} = T$.
+\end{itemize}
+
+\subsection{Deadline Assignment Algorithm}
+
+Assume we have a number of control tasks that can be divided into Calculate Output and Update State.
+
+\begin{enumerate}
+\item Start by assigning initial deadlines:
+\begin{itemize}
+\item $D_{CO} := T - C_{US}$
+\item $D_{US} := T$
+\end{itemize}
+for all tasks.
+\item Assign deadline-monotonic priorities to all subtasks
+\item Calculate the response time $R$ of each subtask
+\item Assign $D_{CO} := R_{CO}$ for all tasks
+\item Repeat from 2 until no further improvement.
+\end{enumerate}
+
+\section{Inverted Pendulum Example}
+
+Control of three inverted pendulums using one CPU:
+\begin{itemize}
+\item $y_1$, $u_1$ with h=10 ms
+\item $y_2$, $u_2$ with h=14.5 ms
+\item $y_3$, $u_3$ with h=17.5ms
+\end{itemize}
+
+Longer pendulum, slower dynamics, longer sampling period.
+
+Under standard RM scheduling with a single shared CPU, the lowest priority task becomes unstable due to large latency and jitter.
+
+With subtask scheduling, all three pendulums become stable with new worst-case input-output latencies: 1.5, 3.0, 4.5 ms.
+
+\section{Conclusions}
+
+\begin{itemize}
+\item Control and scheduling affect each other and cannot be solved separately.
+\item Analytical schedulability analysis assumes no locking between tasks.
+\begin{itemize}
+\item If locks are used, formal verification techniques can check schedulability.
+\end{itemize}
+\item Analytical stability analysis with latency and jitter is hard.
+\begin{itemize}
+\item Extensive simulation is used in practice.
+\end{itemize}
+\end{itemize}
+
+%======================================================================
+\lecture{14}{Testing, Debugging, and Falsification}{Spring 2024}
+%======================================================================
+
+\section{Cyber-Physical Systems and Testing}
+
+Cyber-Physical Systems are the integration of computation, networking, and physical processes. Perception and decision making can include neural networks and learnt behavior.
+
+\subsection{Testing in the Automotive Industry}
+
+\begin{itemize}
+\item Software $\leftrightarrow$ Physical components
+\item Typically safety-critical
+\item Continuous dynamics
+\begin{itemize}
+\item \textbf{Impossible} to \textbf{verify} behaviour
+\item \textbf{Difficult} to \textbf{test} efficiently
+\end{itemize}
+\end{itemize}
+
+\subsection{Safety Levels (ASIL)}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{SIL Level} & \textbf{Acceptable probability of dangerous failure per hour} \\
+\midrule
+1 (approx. ASIL-A) & $\geq 10^{-6}$ to $< 10^{-5}$ \\
+2 & $\geq 10^{-7}$ to $< 10^{-6}$ \\
+3 & $\geq 10^{-8}$ to $< 10^{-7}$ \\
+4 (approx. ASIL-D) & $\geq 10^{-9}$ to $< 10^{-8}$ \\
+& (1 dangerous failure in 114,000 years) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Approaches to Testing and Verification}
+
+\subsection{Model Checking}
+
+If the closed-loop system can be appropriately described by a finite-state model then model-checking algorithms can be used to prove presence and/or absence of violations of specifications.
+
+Tools: SMV/NuSMV, SPIN, UPPAAL, Supremica
+
+Important special case. Useful for low-level but critical systems.
+
+\subsection{Deductive Verification}
+
+Theorem proving (assisted by humans), e.g., KeYmaera X.
+
+\subsection{The Bad News}
+
+\begin{warningbox}
+If the closed-loop system contains a combination of discrete states and continuous states governed by differential equations then the problem of deciding if a state is reachable or not is \textbf{undecidable}.
+
+No algorithm will always be able to answer (in finite time) if a specification is fulfilled or not.
+\end{warningbox}
+
+\section{Scalability of Integration Testing}
+
+\textbf{Scales well:}
+\begin{itemize}
+\item Model-in-the-loop testing
+\item Software-in-the-loop testing
+\end{itemize}
+
+\textbf{Do not scale well:}
+\begin{itemize}
+\item Hardware-in-the-loop testing
+\item Vehicle-in-the-loop testing
+\end{itemize}
+
+\begin{keyidea}
+Hardware-in-the-loop testing and vehicle-in-the-loop testing is always necessary but for rigorous testing most of the testing has to be done using model-in-loop or software-in-the-loop.
+\end{keyidea}
+
+\section{Model-based Testing}
+
+Computer algorithms generate test cases from \textbf{models} of the requirements, plant and controller.
+
+Advantages:
+\begin{itemize}
+\item Reusability of the models
+\item Automatic generation of test cases
+\end{itemize}
+
+\section{Falsification}
+
+\begin{definition}[Model-based Testing using Falsification]
+\textbf{Given:}
+\begin{enumerate}
+\item Model of a controller (e.g. in Simulink)
+\item Model of the physical plant (e.g. in Simulink/Simscape/Modelica)
+\item Model of requirements on the closed-loop system (e.g. Signal Temporal Logic)
+\end{enumerate}
+
+\textbf{Problem:} Is it possible to set parameters and/or have input signals such that the requirements are violated?
+
+\[
+\min_{k} \rho(\varphi, x, t)
+\]
+
+where $\varphi$ is the specification, $x(t)$ are signals from simulation, and $k$ is input parametrization.
+\end{definition}
+
+\textbf{Breach} toolbox uses the specification to calculate robustness of trajectories, which are minimized (negative = falsified) by gradient-free optimizers.
+
+\section{Signal Temporal Logic (STL)}
+
+STL is an extension of Linear Temporal Logic:
+
+\[
+\varphi ::= \mu \mid \neg\mu \mid \varphi \land \psi \mid \varphi \lor \psi \mid \Box_{[a,b]}\psi \mid \Diamond_{[a,b]}\psi \mid \varphi \mathcal{U}_{[a,b]}\psi
+\]
+
+\begin{itemize}
+\item Predicate ($\mu$): e.g., speed $<$ 50, gear $==$ 3
+\item Negation ($\neg$)
+\item AND ($\land$), OR ($\lor$)
+\item Timed always ($\Box_{[a,b]}$)
+\item Timed eventually ($\Diamond_{[a,b]}$)
+\item Timed until ($\mathcal{U}_{[a,b]}$)
+\end{itemize}
+
+\section{Robustness of STL Specifications}
+
+\begin{example}
+\textbf{Spec:} At all times, the speed $v$ must be below 100 km/h
+
+\[
+\varphi = \Box_{[0,T]}(v < 100)
+\]
+
+Robustness values:
+\begin{itemize}
+\item If max speed is 80: Rob = 20 (positive, specification satisfied)
+\item If max speed is 92: Rob = 8 (positive, satisfied with margin)
+\item If max speed is 120: Rob = -20 (negative, specification violated)
+\end{itemize}
+\end{example}
+
+\section{Optimization Methods}
+
+Falsification uses gradient-free optimization:
+\begin{itemize}
+\item CMA-ES
+\item Simulated Annealing
+\item Nelder-Mead
+\item SNOBFIT
+\item Bayesian Optimization (TuRBO)
+\end{itemize}
+
+Bayesian optimization learns the objective function and balances exploration with exploitation.
+
+\section{Structural Code Coverage}
+
+Different code coverage criteria are used to decide when to stop testing:
+\begin{itemize}
+\item Statement coverage
+\item Branch coverage
+\item Condition coverage
+\item Mixed Condition/Decision coverage (MC/DC)
+\end{itemize}
+
+MC/DC is used in avionics software (DO-178B/DO-178C) and automotive software development (for ASIL D in ISO 26262).
+
+\subsection{MC/DC (Modified Condition/Decision Coverage)}
+
+Every condition in the decision independently affects the decision's outcome.
+
+\begin{example}
+For \texttt{if (a \&\& (b || c))}:
+
+Change the value of each condition individually while keeping all other conditions constant.
+
+Possible to achieve MC/DC coverage with 4 tests (out of 8 possible tests).
+\end{example}
+
+\section{Conclusions}
+
+\begin{itemize}
+\item Falsification only assumes that the system-under-test can be simulated or executed --- allows for including arbitrary complexity, including AI-components.
+\item Falsification can only show presence of errors, not absence.
+\item Falsification has been implemented at Volvo Cars for testing electric drive line.
+\item Similar approach can be used for design optimization.
+\item Different testing and verification methods complement each other!
+\end{itemize}
+
+\end{document}

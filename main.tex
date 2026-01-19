@@ -1,0 +1,407 @@
+% !TEX program = lualatex
+\documentclass[11pt, a4paper, oneside]{book}
+
+% ===== Fonts and Language =====
+\usepackage{fontspec}
+\usepackage{polyglossia}
+\setdefaultlanguage{english}
+
+% ===== Math =====
+\usepackage{amsmath, amssymb, amsthm}
+
+% ===== Bibliography =====
+\usepackage[backend=biber, style=numeric, sorting=nyt, maxbibnames=10]{biblatex}
+\addbibresource{references.bib}
+\setcounter{MaxMatrixCols}{12} 
+% ===== Graphics and Layout =====
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{geometry}
+\geometry{margin=1in}
+
+% ===== TikZ and PGFPlots =====
+\usepackage{tikz}
+\usepackage{tikz-3dplot}
+\usetikzlibrary{arrows.meta,calc,positioning}
+
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usetikzlibrary{
+    3d,
+    arrows.meta,
+    calc,
+    patterns,
+    positioning,
+    shapes.geometric,
+    shapes.misc,
+    shapes.arrows,
+    decorations.pathreplacing,
+    decorations.markings,
+    angles,
+    quotes,
+    backgrounds,
+    fit
+}
+
+
+
+% Define colors for consistent figure styling
+\definecolor{xaxis}{RGB}{220,50,50}      % Red for x-axis
+\definecolor{yaxis}{RGB}{50,170,50}      % Green for y-axis
+\definecolor{zaxis}{RGB}{50,50,220}      % Blue for z-axis
+\definecolor{frameA}{RGB}{0,0,0}         % Black for frame A
+\definecolor{frameB}{RGB}{128,128,128}   % Gray for frame B
+\definecolor{vectorcolor}{RGB}{180,50,180} % Magenta for vectors
+
+% TikZ styles for consistent appearance
+\tikzset{
+    % Coordinate frame axes
+    axis/.style={-{Stealth[length=3mm]}, thick},
+    xaxisstyle/.style={axis, xaxis},
+    yaxisstyle/.style={axis, yaxis},
+    zaxisstyle/.style={axis, zaxis},
+    % Vectors
+    vec/.style={-{Stealth[length=2.5mm]}, thick, vectorcolor},
+    % Dashed axes for secondary frames
+    dashedaxis/.style={axis, dashed, opacity=0.7},
+    % Blocks for diagrams
+    block/.style={draw, rectangle, minimum height=2em, minimum width=3em, align=center},
+    sumnode/.style={draw, circle, minimum size=1.5em, inner sep=0pt},
+    % Quadrotor motor
+    motor/.style={draw, circle, fill=gray!30, minimum size=8mm},
+    % Annotations
+    annot/.style={font=\small\itshape},
+}
+
+% ===== Hyperlinks =====
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    urlcolor=cyan,
+    citecolor=green
+}
+
+% ===== Chapter and Section Formatting =====
+\usepackage{titlesec}
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries}{\chaptertitlename\ \thechapter}{20pt}{\Huge}
+\titlespacing*{\chapter}{0pt}{-30pt}{40pt}
+
+% ===== Headers and Footers =====
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\leftmark}
+\fancyhead[R]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ===== Theorem Environments =====
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[chapter]
+% Example environment defined below using tcolorbox
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[chapter]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}[chapter]
+
+% ===== Boxes =====
+\usepackage{tcolorbox}
+\tcbuselibrary{skins, breakable, theorems}
+\newtcolorbox{keyidea}[1][]{
+  colback=blue!5!white,
+  colframe=blue!75!black,
+  fonttitle=\bfseries,
+  title=Key Idea,
+  #1
+}
+\newtcolorbox{notebox}[1][]{
+  colback=yellow!10!white,
+  colframe=yellow!50!black,
+  fonttitle=\bfseries,
+  title=Note,
+  #1
+}
+\newtcolorbox{warningbox}[1][]{
+  colback=red!5!white,
+  colframe=red!75!black,
+  fonttitle=\bfseries,
+  title=Warning,
+  #1
+}
+
+% Example environment with automatic numbering (styled box)
+\newcounter{example}[chapter]
+\renewcommand{\theexample}{\thechapter.\arabic{example}}
+\newtcolorbox{example}[1][]{
+  colback=green!5!white,
+  colframe=green!50!black,
+  fonttitle=\bfseries,
+  breakable,
+  enhanced,
+  before upper={\refstepcounter{example}},
+  title={Example~\theexample\ifx&#1&\else: #1\fi},
+}
+
+% ===== Code Listings =====
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue},
+  commentstyle=\color{green!60!black},
+  stringstyle=\color{red},
+  showstringspaces=false,
+  breaklines=true,
+  frame=single,
+  numbers=left,
+  numberstyle=\tiny\color{gray}
+}
+
+\lstdefinelanguage{yaml}{
+  keywords={true,false,null,y,n},
+  keywordstyle=\color{blue}\bfseries,
+  sensitive=false,
+  comment=[l]{\#},
+  commentstyle=\color{gray}\ttfamily,
+  stringstyle=\color{red}\ttfamily,
+  morestring=[b]',
+  morestring=[b]"
+}
+\lstdefinelanguage{cmake}{
+  keywords={
+    add_executable, add_library, add_subdirectory,
+    target_link_libraries, target_include_directories,
+    target_compile_definitions, target_compile_options,
+    set, unset, option, message,
+    if, elseif, else, endif,
+    foreach, endforeach,
+    while, endwhile,
+    function, endfunction,
+    macro, endmacro,
+    include, find_package, find_library, find_path,
+    project, cmake_minimum_required
+  },
+  keywordstyle=\color{blue}\bfseries,
+  sensitive=true,
+  comment=[l]{\#},
+  commentstyle=\color{gray}\ttfamily,
+  stringstyle=\color{red}\ttfamily,
+  morestring=[b]",
+  morestring=[b]'
+}
+
+\lstdefinelanguage{arm}{%
+  sensitive=true,%
+  backgroundcolor=\color[rgb]{0.98,0.98,0.98},%
+  basicstyle=\ttfamily\small,%
+  keywordstyle=\color{blue}\bfseries,%
+  commentstyle=\color{green!50!black}\itshape,%
+  stringstyle=\color{red!70!black},%
+  numberstyle=\scriptsize\color{gray},%
+  frame=single,%
+  rulecolor=\color{gray!40},%
+  numbers=left,%
+  numbersep=8pt,%
+  tabsize=2,%
+  keepspaces=true,%
+  columns=fullflexible,%
+  breaklines=true,%
+  showstringspaces=false,%
+  morecomment=[l]{;},%
+  morecomment=[l]{@},%
+  morecomment=[l]{//},%
+  morekeywords={%
+    adc,adcs,add,adds,and,ands,asr,asrs,b,bal,beq,bne,bcs,bhs,bcc,blo,%
+    bmi,bpl,bvs,bvc,bhi,bls,bge,blt,bgt,ble,bx,bl,blx,cbz,cbnz,%
+    cmn,cmp,cpsid,cpsie,eor,eors,isb,ldr,ldrb,ldrh,ldrsb,ldrsh,%
+    ldm,ldmia,ldmfd,str,strb,strh,stm,stmia,stmfd,%
+    lsl,lsls,lsr,lsrs,mov,movs,mrs,msr,mul,muls,mvn,mvns,%
+    nop,orr,orrs,pop,push,rev,rev16,revsh,ror,rrx,%
+    rsb,rsbs,sbc,sbcs,sev,sub,subs,tst,teq,%
+    sxtb,sxth,uxtb,uxth,wfe,wfi,yield,%
+    it,ite,itt,itte,svc,udiv,sdiv,%
+    vadd,vmul,vmla,vmls,vdiv,vsqrt,vcvt,vldr,vstr,vpush,vpop%
+  },%
+  morekeywords=[2]{%
+    r0,r1,r2,r3,r4,r5,r6,r7,r8,r9,r10,r11,r12,r13,r14,r15,%
+    sp,lr,pc,ip,fp,%
+    cpsr,spsr,apsr,ipsr,epsr,%
+    primask,basepri,basepri_max,faultmask,control%
+  },%
+  keywordstyle=[2]\color{violet}\bfseries,%
+  morekeywords=[3]{%
+    .text,.data,.bss,.section,.global,.globl,.extern,%
+    .type,.size,.align,.balign,.equ,.set,%
+    .word,.hword,.byte,.ascii,.asciz,.space,.fill,.org,.end%
+  },%
+  keywordstyle=[3]\color{teal},%
+}
+
+% ===== Tables =====
+\usepackage{booktabs}
+\usepackage{multirow}
+
+% ===== Index =====
+\usepackage{makeidx}
+\makeindex
+
+% ===== Custom Commands =====
+\newcommand{\lecture}[3]{%
+  \chapter*{Lecture #1: #2}%
+  \addcontentsline{toc}{chapter}{Lecture #1: #2}%
+  \markboth{Lecture #1: #2}{}%
+  \textbf{Date:} #3\par
+  \vspace{0.5em}\hrule\vspace{1em}
+}
+
+% ===== Title =====
+\title{Model-based Development of Cyber-Physical Systems\\[0.5em]\large Lecture Notes -- SSY191}
+\author{Knut \AA kesson\\
+Department of Electrical Engineering\\
+Chalmers University of Technology}
+\date{Spring 2024}
+
+\begin{document}
+
+\maketitle
+
+\chapter*{Foreword}
+\addcontentsline{toc}{chapter}{Foreword}
+\markboth{Foreword}{}
+
+This book grew out of the lecture notes for the course \emph{Model-based Development of Cyber-Physical Systems} (SSY191) at Chalmers University of Technology. The course takes a project-centered approach where students progressively work through all the steps required to control a quadrotor---from building mathematical models and designing controllers, through simulation and verification, to implementing the control software on actual hardware.
+
+Each week, students make tangible progress on their quadrotor project: deriving the equations of motion, understanding sensor characteristics, designing attitude and position controllers, simulating the closed-loop system, and ultimately seeing their code fly on a real drone. This hands-on progression---from mathematical abstraction to physical reality---embodies the essence of cyber-physical systems engineering.
+
+Beyond the core modeling and control topics, the course covers essential aspects that are often overlooked in traditional control textbooks: real-time operating systems, task scheduling and timing analysis, and systematic testing methods for safety-critical embedded systems. These topics are crucial for anyone who wants to move beyond simulation and deploy control systems in the real world, where timing constraints must be met and software correctness must be verified.
+
+We developed these lecture notes because no single textbook adequately covers this breadth of material---the intersection of control theory, embedded systems, and verification---at the depth required for a project-based course. For years, students relied on a patchwork of slides, handouts, and supplementary readings. Recent advances in generative techniques have made it possible to transform these scattered notes into a coherent, comprehensive text with detailed explanations and worked examples, all within a reasonable effort.
+
+The result is this book: a self-contained guide to the theory and practice of building cyber-physical systems, using the quadrotor as a concrete and motivating example throughout. We hope it serves not only students in the course but also practitioners and researchers who seek a unified treatment of modeling, control, real-time systems, and testing.
+
+\section*{Suggested Course Structure}
+
+The material in this book is designed for a 7-week course with two 90-minute lectures per week. We recommend the following structure, which prioritizes conceptual understanding and mathematical derivations during lectures while assigning implementation details and tool-specific content as independent reading.
+
+\textbf{Module 1: Quadrotor Modelling and Sensor Fusion} (6 lectures)
+\begin{enumerate}
+\item \textbf{Introduction \& Coordinate Frames.} CPS motivation, the sense-estimate-compute-actuate cycle, coordinate conventions (ENU/NED), and 2D rotation intuition.
+\item \textbf{3D Rotations \& Euler Angles.} Rotation matrix composition, demonstrating non-commutativity, Euler angles (ZYX convention), and the gimbal lock problem.
+\item \textbf{Quaternions \& Transformations.} Quaternion algebra, the rotation formula, how quaternions avoid gimbal lock, and homogeneous transformations.
+\item \textbf{Sensors \& Attitude Estimation.} Gyroscope and accelerometer models, the drift problem, complementary filtering (frequency domain insight), and the Mahony filter.
+\item \textbf{Kalman Filtering.} Probability review, the linear Kalman filter derivation, Kalman gain interpretation, and Extended Kalman Filter for attitude.
+\item \textbf{Quadrotor Dynamics \& Control.} Force and torque balance, motor mixing, state-space formulation, linearization at hover, and LQR design.
+\end{enumerate}
+
+\textbf{Module 2: Simulation and Hybrid Systems} (2 lectures)
+\begin{enumerate}
+\setcounter{enumi}{6}
+\item \textbf{Equation-Based Modeling \& Hybrid Systems.} Acausal versus causal modeling, Modelica concepts, hybrid automata formalism, and flight mode state machines.
+\item \textbf{Numerical Simulation.} Euler and Runge-Kutta methods, fixed versus variable step solvers, zero-crossing detection, and multi-rate system timing.
+\end{enumerate}
+
+\textbf{Module 3: Real-Time Embedded Systems} (3 lectures)
+\begin{enumerate}
+\setcounter{enumi}{8}
+\item \textbf{RTOS \& Scheduling.} Why real-time matters, the task model, Rate-Monotonic Scheduling and its optimality, the Liu-Layland bound, and priority inversion.
+\item \textbf{Concurrency \& Synchronization.} Race conditions, mutexes versus semaphores, deadlock conditions and prevention, and producer-consumer patterns.
+\item \textbf{Timing Analysis \& Fault Tolerance.} Response-time analysis, WCET estimation approaches, watchdog timers, and failsafe design principles.
+\end{enumerate}
+
+\textbf{Module 4: Testing and Verification} (3 lectures)
+\begin{enumerate}
+\setcounter{enumi}{11}
+\item \textbf{Testing Levels \& Requirements.} The V-model, MIL/SIL/PIL/HIL testing, formalizing requirements, and Signal Temporal Logic basics.
+\item \textbf{STL Robustness \& Falsification.} Quantitative robustness semantics, falsification as optimization, and using tools like Breach.
+\item \textbf{Coverage, Testing \& Integration.} Code coverage metrics (including MC/DC), unit testing embedded code, CI/CD pipelines, and a complete case study.
+\end{enumerate}
+
+The book contains considerably more detail than can be covered in lectures. We encourage instructors to focus lecture time on geometric intuition, mathematical derivations, and worked examples, while directing students to the text for calibration procedures, API details, and tool-specific syntax. The appendices on C programming, number representation, ARM assembly, and Simulink code generation serve as reference material for students with varying backgrounds.
+
+\vspace{2em}
+\noindent\textit{Gothenburg, 2026}
+
+\vspace{0.5em}
+\noindent Knut \AA kesson
+
+% Only show chapters and sections in table of contents (not subsections)
+\setcounter{tocdepth}{1}
+
+\tableofcontents
+
+% Introduction: Cyber-Physical Systems and Model-Based Development
+\input{chapter_introduction}
+
+% ===== MODULE 1 =====
+\part{Module 1: Quadrotor Modelling and Sensor Fusion}
+%   - Coordinate Frames and 3D Transformations
+%   - Inertial Sensors and Measurement Models
+%   - Orientation Estimation
+%   - Quadrotor Dynamics
+\input{module1}
+
+% ===== MODULE 2 =====
+\part{Module 2: Simulation and Hybrid Systems}
+%   - Equation-Based Modelling
+%   - Hybrid Systems
+%   - Numerical Simulation Methods
+%   - Simulation Fidelity and Model Validity
+%   - Multi-Rate Control Systems
+\input{module2}
+
+% ===== MODULE 3 =====
+\part{Module 3: Real-Time Embedded Systems}
+%   - Why Real-Time Matters
+%   - RTOS Fundamentals and FreeRTOS
+%   - Concurrency and Synchronization
+%   - Deadlocks and Priority Inversion
+%   - Advanced Scheduling Theory
+%   - Latency and Jitter in Control Systems
+%   - Worst-Case Execution Time Estimation
+%   - Fault Detection and Recovery
+\input{module3}
+
+% ===== MODULE 4 =====
+\part{Module 4: Testing and Verification}
+%   - CPS Testing Fundamentals
+%   - Testing Levels (MIL/SIL/PIL/HIL/VIL)
+%   - Signal Temporal Logic and Robustness
+%   - Falsification-Based Testing
+%   - Code Coverage for Safety-Critical Systems
+%   - Debugging Embedded Systems
+\input{module4}
+
+% ===== APPENDICES =====
+\part{Appendices}
+
+% Appendix: C Programming for Python Programmers
+\input{appendix_c_for_python}
+
+% Appendix: Embedded Number Representation
+\input{appendix_number_representation}
+
+% Appendix: ARM Architecture and Assembly Language
+\input{appendix_arm_assembly}
+
+% Appendix: Simulink Code Generation
+\input{appendix_simulink_codegen}
+
+% Appendix: Requirements Engineering for Embedded Systems
+\input{appendix_requirements}
+
+% Appendix: Complete Code Listings
+\input{appendix_code_listings}
+
+% ===== Bibliography =====
+\cleardoublepage
+\addcontentsline{toc}{chapter}{Bibliography}
+\printbibliography[title={Bibliography}]
+
+% ===== Index =====
+\cleardoublepage
+\addcontentsline{toc}{chapter}{Index}
+\printindex
+
+\end{document}

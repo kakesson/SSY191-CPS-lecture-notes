@@ -1,0 +1,1888 @@
+%======================================================================
+% APPENDIX: Complete Code Listings
+%
+% This appendix contains longer code examples that are referenced
+% from the main text. Each listing includes context about its purpose
+% and cross-references to the relevant sections.
+%======================================================================
+
+\chapter{Complete Code Listings}
+\label{app:code-listings}
+\index{code listings}
+
+This appendix provides complete implementations of algorithms and systems discussed in the main text. Shorter code snippets remain inline for immediate context, while these longer listings are collected here for reference without interrupting the narrative flow.
+
+%======================================================================
+\section{Sensor Fusion and State Estimation}
+\label{app:code-sensor-fusion}
+%======================================================================
+
+%----------------------------------------------------------------------
+\subsection{Sensor Calibration}
+%----------------------------------------------------------------------
+
+\begin{lstlisting}[language=C, caption=Gyroscope bias calibration implementation, label=lst:gyro-calib]
+#define GYRO_CALIBRATION_SAMPLES 1000
+
+typedef struct {
+    float bias[3];        // Estimated bias for x, y, z
+    bool calibrated;      // Flag indicating calibration complete
+} GyroCalibration_t;
+
+GyroCalibration_t gyroCalib = {0};
+
+void CalibrateGyroscope(void) {
+    float sum[3] = {0.0f, 0.0f, 0.0f};
+    int16_t raw[3];
+
+    printf("Gyro calibration: Keep quadrotor still...\n");
+
+    for (int i = 0; i < GYRO_CALIBRATION_SAMPLES; i++) {
+        ReadGyroRaw(raw);
+        sum[0] += raw[0];
+        sum[1] += raw[1];
+        sum[2] += raw[2];
+        DelayMs(2);  // 500 Hz sampling
+    }
+
+    // Convert to physical units (deg/s or rad/s)
+    gyroCalib.bias[0] = (sum[0] / GYRO_CALIBRATION_SAMPLES) * GYRO_SCALE;
+    gyroCalib.bias[1] = (sum[1] / GYRO_CALIBRATION_SAMPLES) * GYRO_SCALE;
+    gyroCalib.bias[2] = (sum[2] / GYRO_CALIBRATION_SAMPLES) * GYRO_SCALE;
+    gyroCalib.calibrated = true;
+
+    printf("Gyro bias: [%.4f, %.4f, %.4f] rad/s\n",
+           gyroCalib.bias[0], gyroCalib.bias[1], gyroCalib.bias[2]);
+}
+
+void GetCalibratedGyro(float *omega) {
+    int16_t raw[3];
+    ReadGyroRaw(raw);
+
+    omega[0] = raw[0] * GYRO_SCALE - gyroCalib.bias[0];
+    omega[1] = raw[1] * GYRO_SCALE - gyroCalib.bias[1];
+    omega[2] = raw[2] * GYRO_SCALE - gyroCalib.bias[2];
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=C, caption=Online gyro bias update, label=lst:gyro-online]
+#define STATIONARY_THRESHOLD 0.05f  // rad/s
+#define BIAS_UPDATE_ALPHA    0.001f // Learning rate
+
+void UpdateGyroBiasOnline(float *omega_raw, float *accel) {
+    // Check if stationary (low motion)
+    float omega_mag = sqrtf(omega_raw[0]*omega_raw[0] +
+                            omega_raw[1]*omega_raw[1] +
+                            omega_raw[2]*omega_raw[2]);
+
+    float accel_mag = sqrtf(accel[0]*accel[0] +
+                            accel[1]*accel[1] +
+                            accel[2]*accel[2]);
+
+    bool stationary = (omega_mag < STATIONARY_THRESHOLD) &&
+                      (fabsf(accel_mag - GRAVITY) < 0.5f);
+
+    if (stationary) {
+        // Slowly update bias estimate
+        for (int i = 0; i < 3; i++) {
+            gyroCalib.bias[i] += BIAS_UPDATE_ALPHA *
+                (omega_raw[i] - gyroCalib.bias[i]);
+        }
+    }
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=C, caption=Six-position calibration data structure, label=lst:accel-sixpos]
+typedef struct {
+    float bias[3];         // Bias for x, y, z
+    float scale[3];        // Scale factor for x, y, z
+    float misalign[3][3];  // Misalignment matrix (optional)
+    bool calibrated;
+} AccelCalibration_t;
+
+AccelCalibration_t accelCalib = {
+    .bias = {0.0f, 0.0f, 0.0f},
+    .scale = {1.0f, 1.0f, 1.0f},
+    .calibrated = false
+};
+
+void ComputeAccelCalibration(float meas[6][3]) {
+    // meas[0] = +Z up, meas[1] = -Z up, etc.
+    const float g = 9.81f;
+
+    // Z-axis (positions 0 and 1)
+    accelCalib.bias[2] = (meas[0][2] + meas[1][2]) / 2.0f;
+    accelCalib.scale[2] = (meas[0][2] - meas[1][2]) / (2.0f * g);
+
+    // X-axis (positions 2 and 3)
+    accelCalib.bias[0] = (meas[2][0] + meas[3][0]) / 2.0f;
+    accelCalib.scale[0] = (meas[2][0] - meas[3][0]) / (2.0f * g);
+
+    // Y-axis (positions 4 and 5)
+    accelCalib.bias[1] = (meas[4][1] + meas[5][1]) / 2.0f;
+    accelCalib.scale[1] = (meas[4][1] - meas[5][1]) / (2.0f * g);
+
+    accelCalib.calibrated = true;
+}
+
+void GetCalibratedAccel(float *accel) {
+    int16_t raw[3];
+    ReadAccelRaw(raw);
+
+    for (int i = 0; i < 3; i++) {
+        accel[i] = (raw[i] - accelCalib.bias[i]) / accelCalib.scale[i];
+    }
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=C, caption=Simplified level calibration, label=lst:accel-level]
+void CalibrateLevelAccel(void) {
+    float sum[3] = {0};
+    int16_t raw[3];
+
+    printf("Place quadrotor level and still...\n");
+
+    for (int i = 0; i < 1000; i++) {
+        ReadAccelRaw(raw);
+        sum[0] += raw[0];
+        sum[1] += raw[1];
+        sum[2] += raw[2];
+        DelayMs(2);
+    }
+
+    // When level, X and Y should read 0, Z should read +g (or -g)
+    accelCalib.bias[0] = sum[0] / 1000.0f;
+    accelCalib.bias[1] = sum[1] / 1000.0f;
+    // Z bias is harder - we assume scale is correct and compute bias
+    // such that calibrated Z = g when level
+    accelCalib.bias[2] = sum[2] / 1000.0f - (GRAVITY / ACCEL_SCALE);
+
+    accelCalib.calibrated = true;
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=C, caption=Hard iron calibration (sphere fitting), label=lst:mag-calib]
+typedef struct {
+    float offset[3];     // Hard iron offset
+    float scale[3];      // Soft iron scale (simplified)
+} MagCalibration_t;
+
+void CalibrateMagnetometer(void) {
+    float min[3] = {1e6, 1e6, 1e6};
+    float max[3] = {-1e6, -1e6, -1e6};
+
+    printf("Rotate the quadrotor in all directions...\n");
+
+    for (int i = 0; i < 3000; i++) {
+        float mag[3];
+        ReadMagRaw(mag);
+
+        for (int j = 0; j < 3; j++) {
+            if (mag[j] < min[j]) min[j] = mag[j];
+            if (mag[j] > max[j]) max[j] = mag[j];
+        }
+        DelayMs(10);
+    }
+
+    // Hard iron offset is the center of the ellipsoid
+    for (int i = 0; i < 3; i++) {
+        magCalib.offset[i] = (max[i] + min[i]) / 2.0f;
+        magCalib.scale[i] = (max[i] - min[i]) / 2.0f;
+    }
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=C, caption=Calibration parameter storage, label=lst:calib-storage]
+typedef struct {
+    uint32_t magic;        // Magic number for validation
+    uint32_t version;      // Calibration format version
+    GyroCalibration_t gyro;
+    AccelCalibration_t accel;
+    MagCalibration_t mag;
+    uint32_t checksum;     // CRC for data integrity
+} CalibrationData_t;
+
+#define CALIB_MAGIC 0xCAFE1234
+
+bool LoadCalibration(void) {
+    CalibrationData_t data;
+    EEPROM_Read(CALIB_ADDRESS, &data, sizeof(data));
+
+    if (data.magic != CALIB_MAGIC) {
+        printf("No calibration found\n");
+        return false;
+    }
+
+    if (ComputeCRC(&data, sizeof(data) - 4) != data.checksum) {
+        printf("Calibration data corrupted\n");
+        return false;
+    }
+
+    gyroCalib = data.gyro;
+    accelCalib = data.accel;
+    magCalib = data.mag;
+    return true;
+}
+
+void SaveCalibration(void) {
+    CalibrationData_t data;
+    data.magic = CALIB_MAGIC;
+    data.version = 1;
+    data.gyro = gyroCalib;
+    data.accel = accelCalib;
+    data.mag = magCalib;
+    data.checksum = ComputeCRC(&data, sizeof(data) - 4);
+
+    EEPROM_Write(CALIB_ADDRESS, &data, sizeof(data));
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=C, caption=Calibration validation, label=lst:calib-validate]
+bool ValidateCalibration(void) {
+    bool valid = true;
+
+    // Check gyro bias is reasonable (< 5 deg/s)
+    for (int i = 0; i < 3; i++) {
+        if (fabsf(gyroCalib.bias[i]) > DEG2RAD(5.0f)) {
+            printf("Gyro bias[%d] out of range: %.2f\n",
+                   i, RAD2DEG(gyroCalib.bias[i]));
+            valid = false;
+        }
+    }
+
+    // Check accel scale is reasonable (0.9 to 1.1)
+    for (int i = 0; i < 3; i++) {
+        if (accelCalib.scale[i] < 0.9f || accelCalib.scale[i] > 1.1f) {
+            printf("Accel scale[%d] out of range: %.3f\n",
+                   i, accelCalib.scale[i]);
+            valid = false;
+        }
+    }
+
+    // Check that level reading gives |accel| close to g
+    float accel[3];
+    GetCalibratedAccel(accel);
+    float mag = sqrtf(accel[0]*accel[0] + accel[1]*accel[1] + accel[2]*accel[2]);
+    if (fabsf(mag - GRAVITY) > 0.5f) {
+        printf("Accel magnitude error: %.2f (expected %.2f)\n", mag, GRAVITY);
+        valid = false;
+    }
+
+    return valid;
+}
+\end{lstlisting}
+
+%----------------------------------------------------------------------
+\subsection{Attitude Estimation Filters}
+%----------------------------------------------------------------------
+
+\begin{lstlisting}[language=C, caption=Mahony filter implementation, label=lst:mahony-filter]
+void MahonyUpdate(float gx, float gy, float gz,   // Gyro [rad/s]
+                  float ax, float ay, float az,   // Accel [m/s^2]
+                  float dt) {
+    // Normalize accelerometer
+    float norm = sqrt(ax*ax + ay*ay + az*az);
+    ax /= norm; ay /= norm; az /= norm;
+
+    // Predicted gravity from quaternion (3rd column of R^T)
+    float vx = 2*(q1*q3 - q0*q2);
+    float vy = 2*(q0*q1 + q2*q3);
+    float vz = q0*q0 - q1*q1 - q2*q2 + q3*q3;
+
+    // Error = cross product
+    float ex = ay*vz - az*vy;
+    float ey = az*vx - ax*vz;
+    float ez = ax*vy - ay*vx;
+
+    // Integral error (for bias correction)
+    eInt_x += Ki * ex * dt;
+    eInt_y += Ki * ey * dt;
+    eInt_z += Ki * ez * dt;
+
+    // Apply correction to gyro
+    gx += Kp*ex + eInt_x;
+    gy += Kp*ey + eInt_y;
+    gz += Kp*ez + eInt_z;
+
+    // Integrate quaternion
+    float dq0 = 0.5f * (-q1*gx - q2*gy - q3*gz);
+    float dq1 = 0.5f * ( q0*gx + q2*gz - q3*gy);
+    float dq2 = 0.5f * ( q0*gy - q1*gz + q3*gx);
+    float dq3 = 0.5f * ( q0*gz + q1*gy - q2*gx);
+    q0 += dq0 * dt;
+    q1 += dq1 * dt;
+    q2 += dq2 * dt;
+    q3 += dq3 * dt;
+
+    // Renormalize
+    norm = sqrt(q0*q0 + q1*q1 + q2*q2 + q3*q3);
+    q0 /= norm; q1 /= norm; q2 /= norm; q3 /= norm;
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=C, caption=Attitude EKF implementation, label=lst:attitude-ekf]
+typedef struct {
+    float q[4];      // Quaternion estimate [q0, q1, q2, q3]
+    float P[4][4];   // Covariance matrix
+    float Q[4][4];   // Process noise covariance
+    float R[3][3];   // Measurement noise covariance
+} AttitudeEKF;
+
+void ekf_init(AttitudeEKF* ekf) {
+    // Initial quaternion: identity (no rotation)
+    ekf->q[0] = 1.0f; ekf->q[1] = 0.0f;
+    ekf->q[2] = 0.0f; ekf->q[3] = 0.0f;
+
+    // Initial covariance: moderate uncertainty
+    memset(ekf->P, 0, sizeof(ekf->P));
+    for (int i = 0; i < 4; i++) ekf->P[i][i] = 0.1f;
+
+    // Process noise (tuning parameter)
+    memset(ekf->Q, 0, sizeof(ekf->Q));
+    for (int i = 0; i < 4; i++) ekf->Q[i][i] = 1e-6f;
+
+    // Measurement noise (tuning parameter)
+    memset(ekf->R, 0, sizeof(ekf->R));
+    for (int i = 0; i < 3; i++) ekf->R[i][i] = 0.25f;
+}
+
+void ekf_predict(AttitudeEKF* ekf, float gx, float gy, float gz, float dt) {
+    float* q = ekf->q;
+
+    // Build Omega matrix from gyroscope
+    float Omega[4][4] = {
+        {    0, -gx, -gy, -gz},
+        {   gx,   0,  gz, -gy},
+        {   gy, -gz,   0,  gx},
+        {   gz,  gy, -gx,   0}
+    };
+
+    // F = I + (dt/2) * Omega
+    float F[4][4];
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            F[i][j] = (i == j ? 1.0f : 0.0f) + 0.5f * dt * Omega[i][j];
+        }
+    }
+
+    // Predict state: q = F * q
+    float q_new[4] = {0};
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            q_new[i] += F[i][j] * q[j];
+        }
+    }
+    memcpy(q, q_new, sizeof(q_new));
+
+    // Normalize quaternion
+    float norm = sqrtf(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3]);
+    for (int i = 0; i < 4; i++) q[i] /= norm;
+
+    // Predict covariance: P = F * P * F' + Q
+    float FP[4][4], FPFT[4][4];
+    mat4x4_mult(F, ekf->P, FP);
+    mat4x4_mult_transposed(FP, F, FPFT);
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            ekf->P[i][j] = FPFT[i][j] + ekf->Q[i][j];
+        }
+    }
+}
+
+void ekf_update(AttitudeEKF* ekf, float ax, float ay, float az) {
+    float* q = ekf->q;
+    float g = 9.81f;
+
+    // Normalize accelerometer measurement
+    float a_norm = sqrtf(ax*ax + ay*ay + az*az);
+    if (a_norm < 0.1f) return;  // Skip if no valid reading
+    ax /= a_norm; ay /= a_norm; az /= a_norm;
+
+    // Predicted measurement: h(q) = R(q)' * [0; 0; 1]
+    float h[3] = {
+        2.0f * (q[1]*q[3] - q[0]*q[2]),
+        2.0f * (q[0]*q[1] + q[2]*q[3]),
+        q[0]*q[0] - q[1]*q[1] - q[2]*q[2] + q[3]*q[3]
+    };
+
+    // Innovation (measurement residual)
+    float y[3] = {ax - h[0], ay - h[1], az - h[2]};
+
+    // Measurement Jacobian H (3x4)
+    float H[3][4] = {
+        {-2*q[2],  2*q[3], -2*q[0],  2*q[1]},
+        { 2*q[1],  2*q[0],  2*q[3],  2*q[2]},
+        { 2*q[0], -2*q[1], -2*q[2],  2*q[3]}
+    };
+
+    // S = H * P * H' + R  (3x3)
+    float HP[3][4], S[3][3];
+    mat3x4_mult_4x4(H, ekf->P, HP);
+    mat3x4_mult_4x3T(HP, H, S);
+    for (int i = 0; i < 3; i++) S[i][i] += ekf->R[i][i];
+
+    // K = P * H' * S^{-1}  (4x3)
+    float K[4][3];
+    // ... (compute using matrix operations)
+
+    // Update state: q = q + K * y
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 3; j++) {
+            q[i] += K[i][j] * y[j];
+        }
+    }
+
+    // Normalize quaternion
+    float norm = sqrtf(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3]);
+    for (int i = 0; i < 4; i++) q[i] /= norm;
+
+    // Update covariance: P = (I - K*H) * P
+    // ... (standard Joseph form for numerical stability)
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=C, caption=Multi-sensor EKF structure, label=lst:multisensor-ekf]
+void ekf_full_update(EKF* ekf, SensorData* data) {
+    // Predict using gyroscope
+    ekf_predict(ekf, data->gyro, dt);
+
+    // Update with accelerometer (roll/pitch)
+    if (data->accel_valid) {
+        ekf_update_accel(ekf, data->accel);
+    }
+
+    // Update with magnetometer (yaw)
+    if (data->mag_valid && !data->high_throttle) {
+        ekf_update_mag(ekf, data->mag);
+    }
+
+    // Update with GPS (position/velocity)
+    if (data->gps_valid) {
+        ekf_update_gps(ekf, data->gps);
+    }
+
+    // Update with barometer (altitude)
+    if (data->baro_valid) {
+        ekf_update_baro(ekf, data->baro);
+    }
+}
+\end{lstlisting}
+
+%----------------------------------------------------------------------
+\subsection{Control Implementation}
+%----------------------------------------------------------------------
+
+\begin{lstlisting}[language=C, caption=LQR-tuned PID implementation, label=lst:lqr-pid]
+// LQR-computed gains (from MATLAB)
+#define KP_ROLL  3.87e-3f   // From LQR K[0]
+#define KD_ROLL  5.57e-3f   // From LQR K[1]
+#define KI_ROLL  0.05e-3f   // Added empirically
+
+typedef struct {
+    float integral;
+    float prev_error;
+} PIDState;
+
+float pid_roll(PIDState* state, float phi_d, float phi, float p, float dt) {
+    float error = phi_d - phi;
+
+    // Anti-windup: limit integral
+    state->integral += error * dt;
+    state->integral = clamp(state->integral, -0.5f, 0.5f);
+
+    // PID output
+    float tau = KP_ROLL * error
+              + KI_ROLL * state->integral
+              + KD_ROLL * (0.0f - p);  // Assume p_d = 0
+
+    return tau;
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=C, caption=LQG attitude controller, label=lst:lqg-controller]
+void lqg_attitude_control(AttitudeEKF* ekf, float* tau, float dt) {
+    // Get sensor data
+    float gx, gy, gz, ax, ay, az;
+    imu_read(&gx, &gy, &gz, &ax, &ay, &az);
+
+    // Kalman filter: estimate attitude
+    ekf_predict(ekf, gx, gy, gz, dt);
+    ekf_update(ekf, ax, ay, az);
+
+    // Extract Euler angles from quaternion estimate
+    float phi, theta, psi;
+    quaternion_to_euler(ekf->q, &phi, &theta, &psi);
+
+    // Extract angular rates (direct from gyro, filtered by EKF)
+    float p = gx, q = gy, r = gz;  // Or extract from EKF if estimating bias
+
+    // LQR control law: u = -K * x
+    tau[0] = -(K_PHI * phi + K_P * p);       // Roll torque
+    tau[1] = -(K_THETA * theta + K_Q * q);   // Pitch torque
+    tau[2] = -(K_PSI * psi + K_R * r);       // Yaw torque
+}
+\end{lstlisting}
+
+%----------------------------------------------------------------------
+\subsection{Parameter Identification (MATLAB)}
+%----------------------------------------------------------------------
+
+\begin{lstlisting}[language=Matlab, caption=Bifilar pendulum calculation, label=lst:bifilar]
+function I = bifilar_inertia(m, b, l, T)
+% BIFILAR_INERTIA Calculate moment of inertia from bifilar pendulum
+%   m - mass [kg]
+%   b - string separation [m]
+%   l - string length [m]
+%   T - oscillation period [s]
+
+    g = 9.81;  % gravitational acceleration [m/s^2]
+    I = (m * g * b^2 * T^2) / (16 * pi^2 * l);
+end
+
+% Example measurement for Crazyflie
+m = 0.034;      % kg
+b = 0.05;       % string separation [m]
+l = 0.30;       % string length [m]
+
+% Measured periods for each axis (average of 10 oscillations)
+T_roll = 0.48;   % Roll axis oscillation period [s]
+T_pitch = 0.48;  % Pitch axis oscillation period [s]
+T_yaw = 0.52;    % Yaw axis oscillation period [s]
+
+Ixx = bifilar_inertia(m, b, l, T_roll);
+Iyy = bifilar_inertia(m, b, l, T_pitch);
+Izz = bifilar_inertia(m, b, l, T_yaw);
+
+fprintf('Ixx = %.2e kg*m^2\n', Ixx);
+fprintf('Iyy = %.2e kg*m^2\n', Iyy);
+fprintf('Izz = %.2e kg*m^2\n', Izz);
+\end{lstlisting}
+
+\begin{lstlisting}[language=Matlab, caption=Dynamic inertia identification, label=lst:dynamic-inertia]
+% Load flight data with step commands
+load('step_response_data.mat');
+
+% Data contains:
+%   t - time vector [s]
+%   omega_x - roll rate from gyroscope [rad/s]
+%   motor_cmd - motor commands [0-1, normalized]
+%   motor_rpm - motor speeds [rad/s] (if available)
+
+% Apply step command and measure angular acceleration
+% Use central difference for differentiation
+dt = mean(diff(t));
+omega_dot = diff(omega_x) / dt;
+
+% Find period where step is applied and response is clean
+step_start = find(t > 1.0 & t < 1.5);  % Adjust for your data
+
+% Calculate torque from motor model
+% Tau_x = L * k_f * (omega_1^2 - omega_2^2 + omega_3^2 - omega_4^2)
+% For pure roll step, simplify:
+k_f = 3.5e-8;  % Thrust coefficient [N/(rad/s)^2]
+L = 0.046;     % Arm length [m]
+
+% Average angular acceleration during step
+alpha_avg = mean(omega_dot(step_start));
+
+% Known applied torque from motor difference
+tau_applied = 0.002;  % Calculate from motor commands [N*m]
+
+Ixx_estimated = tau_applied / alpha_avg;
+fprintf('Estimated Ixx = %.2e kg*m^2\n', Ixx_estimated);
+\end{lstlisting}
+
+\begin{lstlisting}[language=Matlab, caption=Thrust coefficient identification from test stand data, label=lst:thrust-coeff]
+% Thrust stand measurements
+% Motor RPM measured with optical tachometer
+% Thrust measured with load cell
+
+rpm_data = [5000, 7000, 9000, 11000, 13000, 15000];  % RPM
+thrust_data = [0.5, 1.0, 1.6, 2.4, 3.3, 4.4];       % grams
+
+% Convert units
+omega_data = rpm_data * 2 * pi / 60;  % rad/s
+thrust_N = thrust_data / 1000 * 9.81;  % Newtons
+
+% Fit T = k_f * omega^2
+omega_sq = omega_data.^2;
+k_f = thrust_N / omega_sq;  % This is a least-squares division
+
+% Better: use polyfit for robustness
+p = polyfit(omega_sq, thrust_N, 1);
+k_f_fit = p(1);
+
+fprintf('k_f = %.2e N/(rad/s)^2\n', k_f_fit);
+
+% Plot fit quality
+figure;
+omega_plot = linspace(0, max(omega_data)*1.1, 100);
+thrust_fit = k_f_fit * omega_plot.^2;
+
+plot(omega_data, thrust_N, 'ko', 'MarkerSize', 10);
+hold on;
+plot(omega_plot, thrust_fit, 'b-', 'LineWidth', 2);
+xlabel('\omega (rad/s)');
+ylabel('Thrust (N)');
+title('Thrust vs Motor Speed');
+legend('Measured', 'Fit: T = k_f \omega^2');
+grid on;
+\end{lstlisting}
+
+\begin{lstlisting}[language=Matlab, caption=Torque coefficient from reaction torque measurement, label=lst:torque-coeff]
+% Mount motor on torque sensor
+% Measure reaction torque at various speeds
+
+rpm_data = [5000, 7000, 9000, 11000, 13000, 15000];
+torque_mNm = [0.2, 0.4, 0.65, 1.0, 1.4, 1.9];  % milli-Newton-meters
+
+omega_data = rpm_data * 2 * pi / 60;
+torque_Nm = torque_mNm / 1000;
+
+% Fit Q = k_tau * omega^2
+omega_sq = omega_data.^2;
+k_tau_fit = polyfit(omega_sq, torque_Nm, 1);
+k_tau = k_tau_fit(1);
+
+fprintf('k_tau = %.2e N*m/(rad/s)^2\n', k_tau);
+
+% Calculate ratio
+ratio = k_tau / k_f_fit;
+fprintf('k_tau / k_f = %.4f\n', ratio);
+\end{lstlisting}
+
+\begin{lstlisting}[language=Matlab, caption=Motor time constant identification, label=lst:motor-timeconstant]
+% Record motor speed response to step command
+load('motor_step_response.mat');
+
+% Data:
+%   t - time [s]
+%   omega_cmd - commanded speed [rad/s]
+%   omega_meas - measured speed [rad/s] (from ESC telemetry or tachometer)
+
+% Find step start time
+step_idx = find(diff(omega_cmd) > 100, 1);
+t_step = t(step_idx);
+
+% Shift time to start at step
+t_rel = t(step_idx:end) - t_step;
+omega_rel = omega_meas(step_idx:end);
+
+% Initial and final values
+omega_0 = omega_rel(1);
+omega_final = mean(omega_rel(end-10:end));
+Delta_omega = omega_final - omega_0;
+
+% First-order response: omega(t) = omega_final * (1 - exp(-t/tau))
+% At t = tau: omega = omega_final * (1 - exp(-1)) = 0.632 * omega_final
+
+% Find time to reach 63.2% of final value
+target = omega_0 + 0.632 * Delta_omega;
+tau_idx = find(omega_rel > target, 1);
+tau_motor = t_rel(tau_idx);
+
+fprintf('Motor time constant: tau_m = %.3f s\n', tau_motor);
+
+% Fit first-order model
+model = @(tau, t) omega_0 + Delta_omega * (1 - exp(-t/tau));
+tau_fit = lsqcurvefit(model, 0.05, t_rel, omega_rel);
+
+fprintf('Fitted time constant: tau_m = %.3f s\n', tau_fit);
+
+% Plot
+figure;
+plot(t_rel*1000, omega_rel, 'b-', 'LineWidth', 2);
+hold on;
+plot(t_rel*1000, model(tau_fit, t_rel), 'r--', 'LineWidth', 2);
+xlabel('Time (ms)');
+ylabel('Motor Speed (rad/s)');
+legend('Measured', 'First-order fit');
+title(['Motor Step Response (\tau = ' num2str(tau_fit*1000, '%.1f') ' ms)']);
+grid on;
+\end{lstlisting}
+
+\begin{lstlisting}[language=Matlab, caption=Frequency sweep analysis, label=lst:freq-sweep]
+% Frequency sweep flight test
+% Command: roll rate reference = A * sin(2*pi*f*t) for various f
+
+frequencies = [0.5, 1, 2, 3, 4, 5, 7, 10, 15, 20];  % Hz
+amplitude = 0.3;  % rad/s
+
+% For each frequency, compute gain and phase from measured response
+gains = zeros(size(frequencies));
+phases = zeros(size(frequencies));
+
+for i = 1:length(frequencies)
+    % Load data for this frequency
+    filename = sprintf('sweep_%.1fHz.mat', frequencies(i));
+    load(filename);
+
+    % t, cmd, response are loaded
+
+    % Use FFT or correlation to find gain and phase
+    f = frequencies(i);
+    omega = 2*pi*f;
+
+    % Cross-correlation method
+    [R, lags] = xcorr(response - mean(response), cmd - mean(cmd), 'coeff');
+    [~, idx] = max(R);
+    phase_lag = lags(idx) * mean(diff(t));
+    phases(i) = -phase_lag * omega * 180/pi;  % degrees
+
+    % Gain from amplitude ratio
+    gain = std(response) / std(cmd);
+    gains(i) = 20*log10(gain);  % dB
+end
+
+% Bode plot
+figure;
+subplot(2,1,1);
+semilogx(frequencies, gains, 'bo-', 'LineWidth', 2);
+ylabel('Gain (dB)');
+title('Experimental Bode Plot - Roll Rate');
+grid on;
+
+subplot(2,1,2);
+semilogx(frequencies, phases, 'ro-', 'LineWidth', 2);
+ylabel('Phase (deg)');
+xlabel('Frequency (Hz)');
+grid on;
+\end{lstlisting}
+
+\begin{lstlisting}[language=Matlab, caption=Grey-box identification for quadrotor dynamics, label=lst:greybox]
+% Define grey-box model structure
+% State: [phi, omega_x]' (roll angle, roll rate)
+% Input: u = motor command difference
+% Parameters: [Ixx, k_f, L, tau_m]
+
+function [A, B, C, D] = roll_model(params, Ts)
+    Ixx = params(1);
+    k_f = params(2);
+    L = params(3);
+    tau_m = params(4);
+
+    % Continuous-time model
+    % Ixx * omega_dot = L * k_f * u
+    % tau_m * omega_motor_dot + omega_motor = u
+
+    % Simplified: assume motor dynamics fast
+    % phi_dot = omega_x
+    % omega_x_dot = (L * k_f / Ixx) * u
+
+    Ac = [0, 1; 0, 0];
+    Bc = [0; L * k_f / Ixx];
+    Cc = [1, 0];
+    Dc = 0;
+
+    % Discretize
+    sys_c = ss(Ac, Bc, Cc, Dc);
+    sys_d = c2d(sys_c, Ts, 'zoh');
+    [A, B, C, D] = ssdata(sys_d);
+end
+
+% Create idgrey model
+params_init = [1.4e-5, 3.5e-8, 0.046, 0.05];
+Ts = 0.001;  % Sample time
+
+roll_model_grey = idgrey(@roll_model, params_init, 'cd', ...
+    'Name', 'Roll Dynamics');
+
+% Set parameter bounds
+roll_model_grey.Structure.Parameters(1).Minimum = 1e-6;  % Ixx
+roll_model_grey.Structure.Parameters(1).Maximum = 1e-3;
+roll_model_grey.Structure.Parameters(2).Minimum = 1e-9;  % k_f
+roll_model_grey.Structure.Parameters(2).Maximum = 1e-6;
+% ... etc
+
+% Estimate parameters from flight data
+load('roll_identification_data.mat');  % Contains u, y, t
+data = iddata(y, u, Ts);
+
+roll_model_est = greyest(data, roll_model_grey);
+
+% Display results
+fprintf('Identified parameters:\n');
+fprintf('  Ixx = %.2e kg*m^2\n', roll_model_est.Structure.Parameters(1).Value);
+fprintf('  k_f = %.2e N/(rad/s)^2\n', roll_model_est.Structure.Parameters(2).Value);
+fprintf('  L = %.4f m\n', roll_model_est.Structure.Parameters(3).Value);
+fprintf('  tau_m = %.4f s\n', roll_model_est.Structure.Parameters(4).Value);
+\end{lstlisting}
+
+\begin{lstlisting}[language=Matlab, caption=Model validation with cross-validation, label=lst:model-validate]
+% Split data: 70% identification, 30% validation
+n = length(t);
+n_id = round(0.7 * n);
+
+data_id = iddata(y(1:n_id), u(1:n_id), Ts);
+data_val = iddata(y(n_id+1:end), u(n_id+1:end), Ts);
+
+% Identify on training data
+model_est = greyest(data_id, roll_model_grey);
+
+% Validate on held-out data
+[y_sim, fit, ~] = compare(data_val, model_est);
+
+fprintf('Validation fit: %.1f%%\n', fit);
+
+% Plot validation
+figure;
+plot(data_val.OutputData, 'b-', 'LineWidth', 1);
+hold on;
+plot(y_sim.OutputData, 'r--', 'LineWidth', 1);
+xlabel('Sample');
+ylabel('Roll angle (rad)');
+legend('Measured', 'Simulated');
+title(['Model Validation (Fit: ' num2str(fit, '%.1f') '%)']);
+grid on;
+\end{lstlisting}
+
+\begin{lstlisting}[language=Matlab, caption=Parameter reasonableness check, label=lst:param-check]
+function valid = check_parameters(params, quadrotor_type)
+% CHECK_PARAMETERS Verify identified parameters are physically reasonable
+
+    Ixx = params.Ixx;
+    k_f = params.k_f;
+    L = params.L;
+    tau_m = params.tau_m;
+    m = params.mass;
+
+    valid = true;
+
+    % Check moment of inertia (should scale with mass * length^2)
+    I_expected = 0.1 * m * L^2;  % Order of magnitude
+    if Ixx < I_expected/100 || Ixx > I_expected*100
+        warning('Ixx = %.2e seems unreasonable for this size quadrotor', Ixx);
+        valid = false;
+    end
+
+    % Check thrust coefficient (should produce ~hover thrust at ~50% throttle)
+    omega_hover = sqrt(m * 9.81 / (4 * k_f));  % rad/s for hover
+    rpm_hover = omega_hover * 60 / (2*pi);
+    if rpm_hover < 3000 || rpm_hover > 50000
+        warning('k_f = %.2e implies hover at %.0f RPM, seems unreasonable', k_f, rpm_hover);
+        valid = false;
+    end
+
+    % Check motor time constant
+    if tau_m < 0.001 || tau_m > 1.0
+        warning('tau_m = %.3f s seems unreasonable', tau_m);
+        valid = false;
+    end
+
+    % Check arm length
+    if L < 0.01 || L > 1.0
+        warning('L = %.3f m seems unreasonable', L);
+        valid = false;
+    end
+
+    if valid
+        fprintf('All parameters within reasonable ranges.\n');
+    end
+end
+\end{lstlisting}
+
+%======================================================================
+\section{Simulation and Modeling}
+\label{app:code-simulation}
+%======================================================================
+
+%----------------------------------------------------------------------
+\subsection{Simscape Motor-Propeller Model}
+%----------------------------------------------------------------------
+
+\begin{lstlisting}[language=Matlab, caption=Creating the motor-propeller Simscape model, label=lst:simscape-model]
+% create_motor_propeller_model.m
+% Creates a complete motor-propeller Simscape model
+
+% Create new model
+model = 'motor_propeller_sim';
+new_system(model);
+open_system(model);
+
+% Add Simscape Solver Configuration
+add_block('nesl_utility/Solver Configuration', ...
+    [model '/Solver'], 'Position', [50 50 100 100]);
+
+% Add ESC (custom component)
+add_block('nesl_utility/Simulink-PS Converter', ...
+    [model '/PWM_to_PS'], 'Position', [150 150 200 180]);
+
+% Add DC Motor from Simscape Electrical
+add_block('elec_lib/Rotational Electromechanics/DC Motor', ...
+    [model '/Motor'], 'Position', [350 140 420 200]);
+set_param([model '/Motor'], ...
+    'Ra', '0.5', ...           % Armature resistance (Ohm)
+    'La', '1e-4', ...          % Armature inductance (H)
+    'Ke', '0.01', ...          % Back-EMF constant (V/(rad/s))
+    'J', '1e-6', ...           % Rotor inertia (kg*m^2)
+    'B', '1e-7');              % Viscous friction
+
+% Add Propeller (custom component)
+add_block('nesl_utility/Simscape Component', ...
+    [model '/Propeller'], 'Position', [500 150 560 190]);
+
+% Add Ideal Rotational Motion Sensor
+add_block('fl_lib/Mechanical/Rotational Elements/Ideal Rotational Motion Sensor', ...
+    [model '/Speed_Sensor'], 'Position', [500 50 560 90]);
+
+% Add Mechanical Rotational Reference
+add_block('fl_lib/Mechanical/Rotational Elements/Mechanical Rotational Reference', ...
+    [model '/Mech_Ref'], 'Position', [600 200 640 240]);
+
+% Add Electrical Reference
+add_block('fl_lib/Electrical/Electrical Elements/Electrical Reference', ...
+    [model '/Elec_Ref'], 'Position', [250 250 290 290]);
+
+% Add Controlled Voltage Source
+add_block('fl_lib/Electrical/Electrical Sources/Controlled Voltage Source', ...
+    [model '/Voltage_Source'], 'Position', [250 140 290 180]);
+
+% Connect the components
+add_line(model, 'PWM_to_PS/1', 'Voltage_Source/1');
+add_line(model, 'Voltage_Source/RConn1', 'Motor/+');
+add_line(model, 'Voltage_Source/RConn2', 'Motor/-');
+add_line(model, 'Motor/-', 'Elec_Ref/1');
+add_line(model, 'Motor/C', 'Propeller/R');
+add_line(model, 'Motor/C', 'Speed_Sensor/R');
+add_line(model, 'Propeller/R', 'Mech_Ref/1', 'autorouting', 'on');
+add_line(model, 'Speed_Sensor/C', 'Mech_Ref/1');
+
+% Add input port for PWM
+add_block('built-in/Inport', [model '/PWM_In'], 'Position', [50 155 80 175]);
+add_line(model, 'PWM_In/1', 'PWM_to_PS/1');
+
+% Add output ports
+add_block('nesl_utility/PS-Simulink Converter', ...
+    [model '/Thrust_PS'], 'Position', [620 155 670 175]);
+add_block('nesl_utility/PS-Simulink Converter', ...
+    [model '/Speed_PS'], 'Position', [620 55 670 75]);
+add_block('built-in/Outport', [model '/Thrust'], 'Position', [720 155 750 175]);
+add_block('built-in/Outport', [model '/Speed'], 'Position', [720 55 750 75]);
+
+% Save model
+save_system(model);
+fprintf('Motor-propeller model created: %s.slx\n', model);
+\end{lstlisting}
+
+\begin{lstlisting}[language=Matlab, caption=Test script for motor-propeller model, label=lst:simscape-test]
+% test_motor_propeller.m
+% Validates the motor-propeller Simscape model
+
+% Load model
+model = 'motor_propeller_sim';
+load_system(model);
+
+% Create test input: Step from 0 to 80% throttle at t=0.1s
+t_sim = 2;  % Simulation time
+
+% Run simulation with step input
+simIn = Simulink.SimulationInput(model);
+simIn = simIn.setVariable('pwm_input', 0.8);
+
+% Run
+out = sim(model, 'StopTime', num2str(t_sim));
+
+% Extract results
+t = out.tout;
+thrust = out.yout{1}.Values.Data;
+speed_rpm = out.yout{2}.Values.Data * 60/(2*pi);
+
+% Plot results
+figure('Position', [100 100 800 600]);
+
+subplot(2,1,1);
+plot(t, thrust, 'b-', 'LineWidth', 1.5);
+xlabel('Time (s)');
+ylabel('Thrust (N)');
+title('Motor-Propeller Step Response');
+grid on;
+
+subplot(2,1,2);
+plot(t, speed_rpm, 'r-', 'LineWidth', 1.5);
+xlabel('Time (s)');
+ylabel('Speed (RPM)');
+grid on;
+
+% Calculate steady-state values
+ss_thrust = mean(thrust(end-100:end));
+ss_speed = mean(speed_rpm(end-100:end));
+fprintf('Steady-state thrust: %.3f N\n', ss_thrust);
+fprintf('Steady-state speed: %.0f RPM\n', ss_speed);
+
+% Calculate time constant (63% of final value)
+idx_63 = find(speed_rpm >= 0.632 * ss_speed, 1);
+tau_m = t(idx_63) - 0.1;  % Subtract step time
+fprintf('Mechanical time constant: %.3f s\n', tau_m);
+\end{lstlisting}
+
+\begin{lstlisting}[language=Matlab, caption=Motor parameter identification for Simscape, label=lst:simscape-param-id]
+% motor_param_identification.m
+% Fits Simscape motor parameters to measured step response data
+
+% Measured data from actual motor (example values)
+measured_data = struct();
+measured_data.steady_state_rpm = 15000;  % At 80% throttle
+measured_data.time_constant = 0.05;       % seconds
+measured_data.steady_state_thrust = 0.015; % N per motor
+
+% Back-calculate parameters
+V_motor = 0.8 * 3.7;  % Motor voltage at 80% throttle
+omega_ss = measured_data.steady_state_rpm * 2*pi/60;  % rad/s
+
+% For steady state: V = Ke*omega + R*I, and I ~= 0 at no load
+Ke_est = V_motor / omega_ss;
+fprintf('Estimated Ke: %.5f V/(rad/s)\n', Ke_est);
+
+% Time constant: tau = J / (B + Ke*Kt/R)
+% Assuming B << Ke*Kt/R: tau ~= J*R / (Ke*Kt)
+% For DC motor, Kt = Ke (in consistent units)
+J_est = measured_data.time_constant * Ke_est^2 / 0.5;  % R = 0.5 assumed
+fprintf('Estimated J: %.2e kg*m^2\n', J_est);
+
+% Thrust coefficient: T = CT * rho * D^4 * omega^2
+D = 0.046;  % 46mm propeller diameter
+rho = 1.225;
+CT_est = measured_data.steady_state_thrust / (rho * D^4 * omega_ss^2);
+fprintf('Estimated CT: %.4f\n', CT_est);
+\end{lstlisting}
+
+%----------------------------------------------------------------------
+\subsection{Ground Effect Modeling}
+%----------------------------------------------------------------------
+
+\begin{lstlisting}[language=Matlab, caption=Propeller with ground effect (Simscape component), label=lst:propeller-ge]
+component PropellerWithGroundEffect
+% Propeller with ground effect model
+% Thrust increases when operating near the ground
+
+parameters
+    CT = 0.1;            % Thrust coefficient
+    CQ = 0.01;           % Torque coefficient
+    D = 0.046;           % Propeller diameter [m]
+    rho = 1.225;         % Air density [kg/m^3]
+    direction = 1;       % +1 for CCW, -1 for CW
+    % Ground effect parameters (exponential model)
+    A_ge = 0.4;          % Ground effect amplitude
+    B_ge = 3.0;          % Ground effect decay rate
+end
+
+inputs
+    z = {1, 'm'};        % Height above ground
+end
+
+outputs
+    T = {0, 'N'};        % Thrust force
+end
+
+nodes
+    R = foundation.mechanical.rotational.rotational;
+end
+
+variables
+    w = {0, 'rad/s'};
+    tau = {0, 'N*m'};
+end
+
+branches
+    tau : R.t -> *;
+end
+
+equations
+    w == R.w;
+
+    % Ground effect multiplier (exponential model)
+    let
+        z_safe = max(z, 0.01*D);  % Prevent division issues
+        z_ratio = z_safe / (D/2); % Height in rotor radii
+        sigma = 1 + A_ge * exp(-B_ge * z_ratio);
+        T_free = direction * CT * rho * D^4 * w * abs(w);
+    in
+        T == sigma * T_free;
+        tau == CQ * rho * D^5 * w * abs(w);  % Torque unaffected
+    end
+end
+end
+\end{lstlisting}
+
+\begin{lstlisting}[language=C, caption=Ground effect compensation in control loop, label=lst:ground-effect-ctrl]
+// Ground effect feedforward compensation
+float GroundEffectFactor(float height_m, float prop_diameter_m)
+{
+    const float A = 0.4f;
+    const float B = 3.0f;
+
+    float z_ratio = height_m / (prop_diameter_m * 0.5f);
+
+    // For high altitudes, return 1 (no effect)
+    if (z_ratio > 5.0f) {
+        return 1.0f;
+    }
+
+    // Exponential ground effect model
+    return 1.0f + A * expf(-B * z_ratio);
+}
+
+void AltitudeController(float z_ref, float z_meas, float z_dot_meas)
+{
+    // PID controller output
+    float throttle_pid = PID_Update(&altitude_pid, z_ref - z_meas);
+
+    // Compensate for ground effect
+    // Since ground effect increases thrust, we need LESS throttle
+    float ge_factor = GroundEffectFactor(z_meas, PROP_DIAMETER);
+    float throttle_compensated = throttle_pid / ge_factor;
+
+    SetThrottle(throttle_compensated);
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=Matlab, caption=Ground effect parameter identification, label=lst:ground-effect-id]
+% Experimental data: thrust measured at various heights
+% (motor speed held constant)
+heights_m = [0.02, 0.03, 0.05, 0.07, 0.10, 0.15, 0.20, 0.30, 0.50];
+thrust_N = [0.52, 0.50, 0.48, 0.465, 0.455, 0.445, 0.44, 0.435, 0.43];
+
+% Free-air thrust (from high-altitude measurement)
+T_infinity = 0.43;  % N
+
+% Calculate sigma from measurements
+sigma_meas = thrust_N / T_infinity;
+
+% Fit exponential model: sigma = 1 + A*exp(-B*z/R)
+R = 0.023;  % Propeller radius [m]
+z_ratio = heights_m / R;
+
+% Define model for fitting
+sigma_model = @(params, z) 1 + params(1) * exp(-params(2) * z);
+
+% Nonlinear least squares fit
+params_init = [0.4, 3];
+params_fit = lsqcurvefit(sigma_model, params_init, z_ratio, sigma_meas);
+
+A_fit = params_fit(1);
+B_fit = params_fit(2);
+
+fprintf('Fitted parameters:\n');
+fprintf('  A = %.3f\n', A_fit);
+fprintf('  B = %.3f\n', B_fit);
+
+% Plot results
+figure;
+z_plot = linspace(0.5, 20, 100);
+sigma_fit = sigma_model(params_fit, z_plot);
+
+plot(z_ratio, sigma_meas, 'ko', 'MarkerSize', 8);
+hold on;
+plot(z_plot, sigma_fit, 'b-', 'LineWidth', 2);
+xlabel('Height / Rotor Radius (z/R)');
+ylabel('Thrust Ratio \sigma');
+title('Ground Effect Characterization');
+legend('Measured', 'Exponential fit');
+grid on;
+\end{lstlisting}
+
+%----------------------------------------------------------------------
+\subsection{Hybrid Systems Implementation}
+%----------------------------------------------------------------------
+
+\begin{lstlisting}[language=Pascal, caption=Quadrotor landing sequence in Modelica, label=lst:modelica-landing]
+model QuadrotorLanding "Hybrid landing sequence"
+  parameter Real m = 0.03 "Mass [kg]";
+  parameter Real g = 9.81 "Gravity [m/s^2]";
+  parameter Real r = 0.023 "Rotor radius [m]";
+  parameter Real h_ge = 0.05 "Ground effect height [m]";
+  parameter Real k_g = 1000 "Ground stiffness [N/m]";
+  parameter Real c_g = 10 "Ground damping [Ns/m]";
+  parameter Real Kp = 2.0, Kd = 1.0, Ki = 0.5;
+
+  Real z(start = -1.0) "Altitude (NED, negative = above ground)";
+  Real vz(start = 0) "Vertical velocity";
+  Real Iz(start = 0) "Integrator state";
+  Real T "Thrust";
+  Real sigma "Ground effect factor";
+  Integer mode(start = 1) "1=Descent, 2=GE, 3=Contact, 4=Settled";
+
+equation
+  // Ground effect factor
+  sigma = if z > -h_ge and z < 0 then 1/(1 - (r/(4*(-z)))^2) else 1.0;
+
+  // Mode-dependent dynamics
+  if mode == 4 then  // Settled
+    der(z) = 0;
+    der(vz) = 0;
+    der(Iz) = 0;
+    T = 0;
+  elseif mode == 3 then  // Contact
+    der(z) = vz;
+    der(vz) = g - T/m + (k_g*z - c_g*vz)/m;
+    der(Iz) = 0;  // Integrator frozen
+    T = m*g * 0.3;  // Reduced thrust during contact
+  else  // Descent or GroundEffect
+    der(z) = vz;
+    der(vz) = g - T*sigma/m;
+    der(Iz) = 0 - z;  // z_target = 0 (ground level)
+    T = m*g + Kp*(0-z) + Kd*((-0.1)-vz) + Ki*Iz;
+  end if;
+
+  // Mode transitions
+  when z > -h_ge and mode == 1 then
+    mode := 2;  // Enter ground effect
+  end when;
+
+  when z >= 0 and mode == 2 then
+    mode := 3;  // Contact
+    reinit(Iz, 0);  // Reset integrator
+  end when;
+
+  when abs(z) < 0.001 and abs(vz) < 0.01 and mode == 3 then
+    mode := 4;  // Settled
+  end when;
+
+end QuadrotorLanding;
+\end{lstlisting}
+
+\begin{lstlisting}[caption=Stateflow chart for Crazyflie flight modes, label=lst:stateflow-flight]
+%% State: Disarmed (default)
+State: Disarmed
+  Entry: motors_enabled = false;
+         integrators_reset();
+  During: T = 0; tau = [0;0;0];
+
+Transition: Disarmed -> Armed
+  Guard: [arm_switch && throttle < 0.1 && battery_voltage > 3.0]
+  Action: arm_time = current_time;
+
+%% State: Armed
+State: Armed
+  Entry: motors_enabled = true;
+  During: T = T_idle;  % Motors spinning at idle
+          tau = attitude_control(phi_cmd, theta_cmd, psi_cmd);
+
+Transition: Armed -> Disarmed
+  Guard: [!arm_switch]
+
+Transition: Armed -> TakingOff
+  Guard: [throttle > 0.5 && (current_time - arm_time) > 1.0]
+  Action: z_target = z_current - 1.0;  % 1m above current
+
+%% State: TakingOff
+State: TakingOff
+  Entry: takeoff_start_z = z_current;
+  During: [T, tau] = position_control(x,y,z, z_target);
+
+Transition: TakingOff -> Hovering
+  Guard: [abs(z - z_target) < 0.1 && abs(vz) < 0.1]
+
+%% State: Hovering
+State: Hovering
+  During: [T, tau] = position_control(x,y,z, position_setpoint);
+
+Transition: Hovering -> Landing
+  Guard: [land_command || battery_voltage < 3.3]
+  Action: descent_rate = -0.3;  % 0.3 m/s descent
+
+%% State: Landing
+State: Landing
+  During: z_target = z_target + descent_rate * dt;
+          [T, tau] = position_control(x,y,z, [x_land, y_land, z_target]);
+
+Transition: Landing -> Disarmed
+  Guard: [z > -0.05 && abs(vz) < 0.05]  % Near ground, slow
+  Action: integrators_reset();
+
+%% Emergency transitions (highest priority)
+Transition: * -> Emergency
+  Guard: [!signal_ok || battery_voltage < 2.9 || abs(phi) > 60 || abs(theta) > 60]
+  Priority: 1
+
+State: Emergency
+  Entry: emergency_start_time = current_time;
+  During: T = 0.5 * m * g;  % Gentle descent
+          tau = attitude_control(0, 0, psi_current);  % Level attitude
+
+Transition: Emergency -> Disarmed
+  Guard: [z > -0.1 || (current_time - emergency_start_time) > 10]
+\end{lstlisting}
+
+%======================================================================
+\section{Real-Time and Embedded Systems}
+\label{app:code-rtos}
+%======================================================================
+
+%----------------------------------------------------------------------
+\subsection{Timer and PWM Configuration}
+%----------------------------------------------------------------------
+
+\begin{lstlisting}[language=C, caption=PWM configuration for quadrotor motors, label=lst:pwm-motors]
+// Configure TIM1 Channel 1-4 for PWM output (motor ESCs)
+void PWM_Init(void)
+{
+    // Enable clocks
+    RCC->APB2ENR |= RCC_APB2ENR_TIM1EN;
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
+
+    // Configure PA8-11 as alternate function (TIM1 CH1-4)
+    GPIOA->MODER |= (2 << 16) | (2 << 18) | (2 << 20) | (2 << 22);
+    GPIOA->AFR[1] |= (1 << 0) | (1 << 4) | (1 << 8) | (1 << 12);
+
+    // Timer configuration for 400 Hz PWM (standard ESC frequency)
+    // 168 MHz / 168 = 1 MHz, period of 2500 gives 400 Hz
+    TIM1->PSC = 167;
+    TIM1->ARR = 2499;
+
+    // Configure channels 1-4 for PWM mode 1
+    TIM1->CCMR1 = (6 << 4) | (6 << 12);  // PWM mode 1, CH1 & CH2
+    TIM1->CCMR2 = (6 << 4) | (6 << 12);  // PWM mode 1, CH3 & CH4
+
+    // Enable outputs
+    TIM1->CCER = TIM_CCER_CC1E | TIM_CCER_CC2E |
+                 TIM_CCER_CC3E | TIM_CCER_CC4E;
+    TIM1->BDTR |= TIM_BDTR_MOE;  // Main output enable (TIM1 specific)
+
+    // Initialize to minimum throttle (1000 us pulse)
+    TIM1->CCR1 = 1000;
+    TIM1->CCR2 = 1000;
+    TIM1->CCR3 = 1000;
+    TIM1->CCR4 = 1000;
+
+    // Start timer
+    TIM1->CR1 |= TIM_CR1_CEN;
+}
+
+// Set motor output (1000-2000 us pulse width)
+void PWM_SetMotor(uint8_t channel, uint16_t pulseWidth_us)
+{
+    // Clamp to valid range
+    if (pulseWidth_us < 1000) pulseWidth_us = 1000;
+    if (pulseWidth_us > 2000) pulseWidth_us = 2000;
+
+    // Set compare register (1 MHz timer = 1 us per tick)
+    switch (channel) {
+        case 1: TIM1->CCR1 = pulseWidth_us; break;
+        case 2: TIM1->CCR2 = pulseWidth_us; break;
+        case 3: TIM1->CCR3 = pulseWidth_us; break;
+        case 4: TIM1->CCR4 = pulseWidth_us; break;
+    }
+}
+\end{lstlisting}
+
+%----------------------------------------------------------------------
+\subsection{DMA Configuration}
+%----------------------------------------------------------------------
+
+\begin{lstlisting}[language=C, caption=DMA configuration for SPI IMU read, label=lst:dma-spi]
+// Buffer for IMU data (14 bytes: accel XYZ, temp, gyro XYZ)
+uint8_t imuDmaBuffer[14];
+uint8_t imuTxBuffer[14] = {0x80 | 0x3B, 0, 0, 0, 0, 0, 0,
+                           0, 0, 0, 0, 0, 0, 0};  // Read from 0x3B
+
+void DMA_SPI_Init(void)
+{
+    // Enable DMA2 clock (SPI1 uses DMA2)
+    RCC->AHB1ENR |= RCC_AHB1ENR_DMA2EN;
+
+    // Configure DMA2 Stream 0 for SPI1 RX (Channel 3)
+    DMA2_Stream0->CR = 0;  // Disable stream first
+    while (DMA2_Stream0->CR & DMA_SxCR_EN);  // Wait for disable
+
+    DMA2_Stream0->PAR = (uint32_t)&SPI1->DR;  // Peripheral address
+    DMA2_Stream0->M0AR = (uint32_t)imuDmaBuffer;  // Memory address
+    DMA2_Stream0->NDTR = 14;  // Number of transfers
+
+    DMA2_Stream0->CR = (3 << 25) |  // Channel 3
+                       DMA_SxCR_MINC |  // Memory increment
+                       DMA_SxCR_TCIE;   // Transfer complete interrupt
+
+    // Configure DMA2 Stream 3 for SPI1 TX (Channel 3)
+    DMA2_Stream3->CR = 0;
+    while (DMA2_Stream3->CR & DMA_SxCR_EN);
+
+    DMA2_Stream3->PAR = (uint32_t)&SPI1->DR;
+    DMA2_Stream3->M0AR = (uint32_t)imuTxBuffer;
+    DMA2_Stream3->NDTR = 14;
+
+    DMA2_Stream3->CR = (3 << 25) |    // Channel 3
+                       DMA_SxCR_MINC |  // Memory increment
+                       (1 << 6);        // Memory to peripheral
+
+    // Enable DMA requests in SPI
+    SPI1->CR2 |= SPI_CR2_RXDMAEN | SPI_CR2_TXDMAEN;
+
+    // Enable DMA interrupt
+    NVIC_SetPriority(DMA2_Stream0_IRQn, 5);
+    NVIC_EnableIRQ(DMA2_Stream0_IRQn);
+}
+
+void IMU_StartDmaRead(void)
+{
+    // Assert chip select
+    GPIOB->BSRR = GPIO_BSRR_BR0;
+
+    // Reset transfer counts
+    DMA2_Stream0->NDTR = 14;
+    DMA2_Stream3->NDTR = 14;
+
+    // Enable DMA streams
+    DMA2_Stream0->CR |= DMA_SxCR_EN;
+    DMA2_Stream3->CR |= DMA_SxCR_EN;
+}
+
+void DMA2_Stream0_IRQHandler(void)
+{
+    if (DMA2->LISR & DMA_LISR_TCIF0) {
+        DMA2->LIFCR = DMA_LIFCR_CTCIF0;  // Clear flag
+
+        // Deassert chip select
+        GPIOB->BSRR = GPIO_BSRR_BS0;
+
+        // Signal processing task
+        BaseType_t woken = pdFALSE;
+        xSemaphoreGiveFromISR(xImuDataReady, &woken);
+        portYIELD_FROM_ISR(woken);
+    }
+}
+\end{lstlisting}
+
+%----------------------------------------------------------------------
+\subsection{Battery Management}
+%----------------------------------------------------------------------
+
+\begin{lstlisting}[language=C, caption=Battery state management, label=lst:battery-state]
+typedef enum {
+    BATTERY_NORMAL,     // Normal operation
+    BATTERY_LOW,        // Low warning - notify user
+    BATTERY_CRITICAL,   // Critical - initiate landing
+    BATTERY_CUTOFF      // Cutoff - disable motors
+} BatteryState_t;
+
+typedef struct {
+    BatteryState_t state;
+    uint32_t state_entry_time;
+    uint8_t warning_count;
+} BatteryStateMachine_t;
+
+void Battery_UpdateState(BatteryStateMachine_t *sm, float voltage)
+{
+    float cell_voltage = voltage / BATTERY_CELLS;
+    BatteryState_t new_state = sm->state;
+
+    // Hysteresis to prevent rapid state changes
+    const float HYSTERESIS = 0.05f;
+
+    switch (sm->state) {
+        case BATTERY_NORMAL:
+            if (cell_voltage < CELL_LOW_VOLTAGE) {
+                new_state = BATTERY_LOW;
+            }
+            break;
+
+        case BATTERY_LOW:
+            if (cell_voltage > CELL_LOW_VOLTAGE + HYSTERESIS) {
+                new_state = BATTERY_NORMAL;
+            } else if (cell_voltage < CELL_CRITICAL_VOLTAGE) {
+                new_state = BATTERY_CRITICAL;
+            }
+            break;
+
+        case BATTERY_CRITICAL:
+            if (cell_voltage > CELL_CRITICAL_VOLTAGE + HYSTERESIS) {
+                new_state = BATTERY_LOW;
+            } else if (cell_voltage < CELL_CUTOFF_VOLTAGE) {
+                new_state = BATTERY_CUTOFF;
+            }
+            break;
+
+        case BATTERY_CUTOFF:
+            // No recovery from cutoff - require power cycle
+            break;
+    }
+
+    if (new_state != sm->state) {
+        sm->state = new_state;
+        sm->state_entry_time = HAL_GetTick();
+        Battery_HandleStateChange(new_state);
+    }
+}
+
+void Battery_HandleStateChange(BatteryState_t state)
+{
+    switch (state) {
+        case BATTERY_LOW:
+            LED_SetPattern(LED_SLOW_BLINK);
+            TelemetryLog("Battery low warning");
+            break;
+
+        case BATTERY_CRITICAL:
+            LED_SetPattern(LED_FAST_BLINK);
+            TelemetryLog("Battery critical - auto-landing");
+            FlightMode_SetAutoLand();
+            break;
+
+        case BATTERY_CUTOFF:
+            LED_SetPattern(LED_SOLID);
+            TelemetryLog("Battery cutoff - motors disabled");
+            Motors_DisableAll();
+            break;
+
+        default:
+            break;
+    }
+}
+\end{lstlisting}
+
+%----------------------------------------------------------------------
+\subsection{micro-ROS Integration}
+%----------------------------------------------------------------------
+
+\begin{lstlisting}[language=C, caption=micro-ROS with FreeRTOS, label=lst:microros-freertos]
+#include <rcl/rcl.h>
+#include <rclc/rclc.h>
+#include <rclc/executor.h>
+#include <geometry_msgs/msg/pose_stamped.h>
+
+// micro-ROS entities
+rcl_allocator_t allocator;
+rclc_support_t support;
+rcl_node_t node;
+rcl_publisher_t position_publisher;
+rclc_executor_t executor;
+
+geometry_msgs__msg__PoseStamped position_msg;
+
+// Timer callback for publishing position
+void position_timer_callback(rcl_timer_t *timer, int64_t last_call_time) {
+    (void)last_call_time;
+
+    // Get current position from flight controller
+    position_msg.pose.position.x = GetPositionX();
+    position_msg.pose.position.y = GetPositionY();
+    position_msg.pose.position.z = GetPositionZ();
+
+    // Update timestamp
+    int64_t time_ns = rmw_uros_epoch_nanos();
+    position_msg.header.stamp.sec = time_ns / 1000000000;
+    position_msg.header.stamp.nanosec = time_ns % 1000000000;
+
+    rcl_publish(&position_publisher, &position_msg, NULL);
+}
+
+// FreeRTOS task for micro-ROS
+void MicroRosTask(void *argument) {
+    // Initialize micro-ROS
+    allocator = rcl_get_default_allocator();
+
+    // Wait for agent connection
+    while (rmw_uros_ping_agent(100, 1) != RMW_RET_OK) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+
+    // Create support and node
+    rclc_support_init(&support, 0, NULL, &allocator);
+    rclc_node_init_default(&node, "flight_controller", "", &support);
+
+    // Create publisher
+    rclc_publisher_init_default(
+        &position_publisher,
+        &node,
+        ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, PoseStamped),
+        "/drone/position"
+    );
+
+    // Create timer (50 Hz)
+    rcl_timer_t timer;
+    rclc_timer_init_default(&timer, &support, RCL_MS_TO_NS(20),
+                            position_timer_callback);
+
+    // Create executor
+    rclc_executor_init(&executor, &support.context, 1, &allocator);
+    rclc_executor_add_timer(&executor, &timer);
+
+    // Main loop
+    for (;;) {
+        rclc_executor_spin_some(&executor, RCL_MS_TO_NS(10));
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
+    // Cleanup (never reached in normal operation)
+    rcl_publisher_fini(&position_publisher, &node);
+    rcl_node_fini(&node);
+    rclc_support_fini(&support);
+}
+
+// Main initialization
+void main(void) {
+    // ... hardware initialization ...
+
+    // Create micro-ROS task (lower priority than control loops)
+    xTaskCreate(MicroRosTask, "MicroROS", 4096, NULL, 3, NULL);
+
+    // Create control tasks (higher priority)
+    xTaskCreate(AttitudeControlTask, "AttCtrl", 512, NULL, 6, NULL);
+
+    vTaskStartScheduler();
+}
+\end{lstlisting}
+
+%======================================================================
+\section{Testing and Continuous Integration}
+\label{app:code-testing}
+%======================================================================
+
+%----------------------------------------------------------------------
+\subsection{Unit Testing with Unity}
+%----------------------------------------------------------------------
+
+\begin{lstlisting}[language=C, caption=Unit tests for PID controller, label=lst:test-pid]
+// test_pid.c
+
+#include "unity.h"
+#include "pid.h"
+
+static PID_t pid;
+
+void setUp(void) {
+    // Reset PID before each test
+    PID_Init(&pid, 1.0f, 0.1f, 0.01f);  // Kp=1, Ki=0.1, Kd=0.01
+    PID_SetLimits(&pid, -100.0f, 100.0f);
+}
+
+void tearDown(void) {}
+
+void test_pid_proportional_only(void) {
+    // With Ki=0, Kd=0, output should be Kp * error
+    PID_Init(&pid, 2.0f, 0.0f, 0.0f);
+    float output = PID_Update(&pid, 10.0f, 0.01f);  // error=10, dt=0.01s
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 20.0f, output);  // 2.0 * 10 = 20
+}
+
+void test_pid_integral_accumulates(void) {
+    PID_Init(&pid, 0.0f, 1.0f, 0.0f);  // Ki only
+    // Apply constant error over multiple steps
+    for (int i = 0; i < 10; i++) {
+        PID_Update(&pid, 5.0f, 0.1f);  // error=5, dt=0.1s
+    }
+    float output = PID_Update(&pid, 5.0f, 0.1f);
+    // Integral should be 5 * 0.1 * 11 = 5.5 (cumulative)
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 5.5f, output);
+}
+
+void test_pid_derivative_responds_to_change(void) {
+    PID_Init(&pid, 0.0f, 0.0f, 1.0f);  // Kd only
+    PID_Update(&pid, 0.0f, 0.01f);      // First call, error=0
+    float output = PID_Update(&pid, 10.0f, 0.01f);  // error jumps to 10
+    // Derivative = (10 - 0) / 0.01 = 1000 (but limited)
+    TEST_ASSERT_FLOAT_WITHIN(1.0f, 100.0f, output);  // Limited to 100
+}
+
+void test_pid_output_saturation(void) {
+    PID_Init(&pid, 100.0f, 0.0f, 0.0f);  // High gain
+    PID_SetLimits(&pid, -50.0f, 50.0f);
+    float output = PID_Update(&pid, 10.0f, 0.01f);  // Would be 1000
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 50.0f, output);  // Saturated at 50
+}
+
+void test_pid_anti_windup(void) {
+    PID_Init(&pid, 1.0f, 10.0f, 0.0f);
+    PID_SetLimits(&pid, -50.0f, 50.0f);
+    // Saturate the output for many steps
+    for (int i = 0; i < 100; i++) {
+        PID_Update(&pid, 100.0f, 0.01f);  // Large error, saturates
+    }
+    // Now reverse error - should respond quickly if anti-windup works
+    float output = PID_Update(&pid, -10.0f, 0.01f);
+    TEST_ASSERT_TRUE(output < 0.0f);  // Should go negative
+}
+
+int main(void) {
+    UNITY_BEGIN();
+    RUN_TEST(test_pid_proportional_only);
+    RUN_TEST(test_pid_integral_accumulates);
+    RUN_TEST(test_pid_derivative_responds_to_change);
+    RUN_TEST(test_pid_output_saturation);
+    RUN_TEST(test_pid_anti_windup);
+    return UNITY_END();
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=C, caption=Unit tests for sensor filtering, label=lst:test-filters]
+// test_filters.c
+
+#include "unity.h"
+#include "filters.h"
+#include <math.h>
+
+void setUp(void) {}
+void tearDown(void) {}
+
+void test_lowpass_filter_initialization(void) {
+    LowpassFilter_t lpf;
+    Lowpass_Init(&lpf, 10.0f, 0.002f);  // 10 Hz cutoff, 500 Hz sample
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, lpf.output);
+}
+
+void test_lowpass_filter_steady_state(void) {
+    LowpassFilter_t lpf;
+    Lowpass_Init(&lpf, 10.0f, 0.002f);
+    // Apply constant input - output should converge to input
+    for (int i = 0; i < 1000; i++) {
+        Lowpass_Update(&lpf, 5.0f);
+    }
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 5.0f, lpf.output);
+}
+
+void test_lowpass_filter_attenuates_high_freq(void) {
+    LowpassFilter_t lpf;
+    float cutoff = 10.0f;
+    float dt = 0.002f;  // 500 Hz
+    Lowpass_Init(&lpf, cutoff, dt);
+    // Apply 100 Hz sine wave (well above cutoff)
+    float amplitude = 0.0f;
+    for (int i = 0; i < 1000; i++) {
+        float t = i * dt;
+        float input = sinf(2.0f * M_PI * 100.0f * t);
+        Lowpass_Update(&lpf, input);
+        if (i > 500) {
+            if (fabsf(lpf.output) > amplitude) {
+                amplitude = fabsf(lpf.output);
+            }
+        }
+    }
+    // 100 Hz is 10x above cutoff, expect ~10x attenuation
+    TEST_ASSERT_TRUE(amplitude < 0.2f);
+}
+
+void test_complementary_filter_combines_sources(void) {
+    ComplementaryFilter_t cf;
+    CompFilter_Init(&cf, 0.98f);  // alpha = 0.98
+    float angle_gyro = 0.0f;
+    float angle_accel = 0.0f;
+    for (int i = 0; i < 1000; i++) {
+        angle_gyro += 0.01f;  // Gyro drifts 0.01 per step
+        CompFilter_Update(&cf, angle_gyro, angle_accel, 0.002f);
+    }
+    // With alpha=0.98, gyro dominates short-term but accel corrects drift
+    TEST_ASSERT_TRUE(cf.angle < 5.0f);  // Not fully drifted
+    TEST_ASSERT_TRUE(cf.angle > -1.0f); // Not negative
+}
+
+int main(void) {
+    UNITY_BEGIN();
+    RUN_TEST(test_lowpass_filter_initialization);
+    RUN_TEST(test_lowpass_filter_steady_state);
+    RUN_TEST(test_lowpass_filter_attenuates_high_freq);
+    RUN_TEST(test_complementary_filter_combines_sources);
+    return UNITY_END();
+}
+\end{lstlisting}
+
+%----------------------------------------------------------------------
+\subsection{CI/CD Configuration}
+%----------------------------------------------------------------------
+
+\begin{lstlisting}[language=yaml, caption=Flight Controller CI workflow, label=lst:ci-yaml]
+name: Flight Controller CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install ARM toolchain
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc-arm-none-eabi
+
+    - name: Build for target (ARM)
+      run: |
+        mkdir build-arm && cd build-arm
+        cmake -DCMAKE_TOOLCHAIN_FILE=../cmake/arm-none-eabi.cmake ..
+        make -j$(nproc)
+
+    - name: Build for host (unit tests)
+      run: |
+        mkdir build-host && cd build-host
+        cmake -DBUILD_TESTS=ON ..
+        make -j$(nproc)
+
+    - name: Run unit tests
+      run: |
+        cd build-host
+        ctest --output-on-failure
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: build-host/test-results.xml
+
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run cppcheck
+      run: |
+        sudo apt-get install -y cppcheck
+        cppcheck --enable=warning,style --error-exitcode=1 src/
+
+    - name: Check formatting
+      run: |
+        sudo apt-get install -y clang-format
+        find src/ -name '*.c' -o -name '*.h' | xargs clang-format --dry-run -Werror
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Build with coverage
+      run: |
+        mkdir build-cov && cd build-cov
+        cmake -DBUILD_TESTS=ON -DENABLE_COVERAGE=ON ..
+        make -j$(nproc)
+
+    - name: Run tests and collect coverage
+      run: |
+        cd build-cov
+        ctest
+        gcovr --xml coverage.xml --xml-pretty
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: build-cov/coverage.xml
+
+    - name: Check coverage threshold
+      run: |
+        cd build-cov
+        gcovr --fail-under-line 80
+
+  simulation-test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup MATLAB
+      uses: matlab-actions/setup-matlab@v1
+
+    - name: Run MIL tests
+      uses: matlab-actions/run-command@v1
+      with:
+        command: |
+          cd simulation
+          results = runtests('tests/')
+          assertSuccess(results)
+\end{lstlisting}

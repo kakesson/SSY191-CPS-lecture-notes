@@ -1,0 +1,19 @@
+# LaTeX generated files
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.idx
+*.ilg
+*.ind
+*.log
+*.out
+*.run.xml
+*.toc
+*.pdf
+
+# Test files
+test_figure.*
+
+# OS files
+.DS_Store
